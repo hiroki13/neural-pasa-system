@@ -3,18 +3,32 @@ import theano
 
 from vocab import Vocab
 
+UNK = u'<UNK>'
 
-def get_sample_info(corpus, vocab_word, window=5):
+NON = 0
+GA = 1
+O = 2
+NI = 3
+V = 4
+
+
+def get_sample_info(corpus, vocab_word, vocab_label=Vocab(), window=5):
     """
     :param corpus: 1D: n_docs, 2D: n_sents, 3D: n_words; elem=Word
     :return: samples: 1D: n_sents, 2D: n_prds, 3D: n_chars, 4D: [char_id, ctx_ids, prd_id, tag_id]
     """
 
     word_ids = []
-    tag_ids = []
+    labels = []
     prd_indices = []
     contexts = []
-    vocab_tag = Vocab()
+
+    if vocab_label.size() == 0:
+        vocab_label.add_word('NON')
+        vocab_label.add_word('Ga')
+        vocab_label.add_word('O')
+        vocab_label.add_word('Ni')
+        vocab_label.add_word('V')
 
     sorted_corpus = []
     for doc in corpus:
@@ -23,35 +37,42 @@ def get_sample_info(corpus, vocab_word, window=5):
     sorted_corpus.sort(key=lambda x: len(x))
 
     for sent in sorted_corpus:
-        tmp_word_ids = [vocab_word.get_id(w.form) for w in sent]
-        tmp_tag_ids, tmp_prd_indices, vocab_tag = get_tag_ids(sent, vocab_tag)
+        tmp_word_ids = []
+        for w in sent:
+            if w.form not in vocab_word.w2i:
+                w_id = vocab_word.get_id(UNK)
+            else:
+                w_id = vocab_word.get_id(w.form)
+
+            tmp_word_ids.append(w_id)
+        tmp_labels, tmp_prd_indices = get_label(sent, vocab_label)
 
         if len(tmp_prd_indices) == 0:
             continue
 
         word_ids.append(tmp_word_ids)
-        tag_ids.append(tmp_tag_ids)
+        labels.append(tmp_labels)
         prd_indices.append(tmp_prd_indices)
         contexts.append(get_context(tmp_word_ids, tmp_prd_indices, window))
 
-    assert len(word_ids) == len(tag_ids) == len(prd_indices) == len(contexts)
-    return (word_ids, tag_ids, prd_indices, contexts), vocab_tag
+    assert len(word_ids) == len(labels) == len(prd_indices) == len(contexts)
+    return (word_ids, labels, prd_indices, contexts), vocab_label
 
 
-def get_tag_ids(sent, vocab_tag):
+def get_label(sent, vocab_label):
     """
     :param sent: 1D: n_words, 2D: (word, pas_info, pas_id)
     :return: tag_ids: 1D: n_prds, 2D: n_chars; elem=tag_id
     :return: prd_indices: 1D: n_prds, 2D: n_chars of prd; elem=char index
     """
 
-    tag_ids = []
+    labels = []
     prd_indices = []
 
     for word in sent:
         if word.is_prd:  # check if the word is predicate or not
             prd_indices.append(word.index)
-            p_tag_ids = []
+            p_labels = []
 
             for arg in sent:
                 case_label = None
@@ -59,11 +80,11 @@ def get_tag_ids(sent, vocab_tag):
                 # case_arg_ids: [Ga_arg_id, O_arg_id, Ni_arg_id]
                 for case_i, case_arg_id in enumerate(word.case_arg_ids):
                     if arg.pas_id > -1 and arg.pas_id == case_arg_id:
-                        if case_i == 0:
+                        if case_i+1 == GA:
                             case_label = 'Ga'
-                        elif case_i == 1:
+                        elif case_i+1 == O:
                             case_label = 'O'
-                        elif case_i == 2:
+                        elif case_i+1 == NI:
                             case_label = 'Ni'
                         break
 
@@ -71,15 +92,14 @@ def get_tag_ids(sent, vocab_tag):
                     case_label = 'V'
 
                 if case_label is None:
-                    p_tag_ids.append(-1)
-                else:
-                    vocab_tag.add_word(case_label)
-                    p_tag_ids.append(vocab_tag.get_id(case_label))
+                    case_label = 'NON'
 
-            assert len(p_tag_ids) == len(sent)
-            tag_ids.append(p_tag_ids)
+                p_labels.append(vocab_label.get_id(case_label))
 
-    return tag_ids, prd_indices, vocab_tag
+            assert len(p_labels) == len(sent)
+            labels.append(p_labels)
+
+    return labels, prd_indices
 
 
 def get_context(sent, prd_indices, window=5):
@@ -104,7 +124,7 @@ def get_context(sent, prd_indices, window=5):
 
 
 def corpus_statistics(corpus):
-    print '\nCORPUS STATISTICS'
+    print 'CORPUS STATISTICS'
 
     n_sents = 0
     n_words = 0
@@ -129,40 +149,41 @@ def theano_format(samples, batch_size=32):
     def shared(_sample):
         return theano.shared(np.asarray(_sample, dtype='int32'), borrow=True)
 
-    theano_l = []
-    theano_c = []
+    theano_x = []
+    theano_y = []
     batch_index = []
     sent_length = []
 
-    sample_t = samples[1]
-    sample_c = samples[-1]
+    sample_x = samples[-1]
+    sample_y = samples[1]
 
-    prev_n_words = len(sample_c[0][0])
+    prev_n_words = len(sample_x[0][0])
     prev_index = 0
     index = 0
 
-    for i in xrange(len(sample_c)):
-        p_tags = sample_t[i]
-        p_contexts = sample_c[i]  # 1D: n_prds, 2D: n_words, 3D: window; word_id
+    for i in xrange(len(sample_x)):
+        prd_x = sample_x[i]  # 1D: n_prds, 2D: n_words, 3D: window; word_id
+        prd_y = sample_y[i]
 
         """ Check the boundary of batches """
-        n_words = len(p_contexts[0])
+        n_words = len(prd_x[0])
         if prev_n_words != n_words or index - prev_index > batch_size:
             batch_index.append((prev_index, index))
             sent_length.append(prev_n_words)
             prev_index = index
+            prev_n_words = n_words
 
-        for j in xrange(len(p_contexts)):
-            labels = p_tags[j]
-            contexts = p_contexts[j]
+        for j in xrange(len(prd_x)):
+            sent_x = prd_x[j]
+            sent_y = prd_y[j]
 
-            for k in xrange(len(contexts)):
-                label = labels[k]
-                context = contexts[k]
-                theano_l.append(label)
-                theano_c.append(context)
+            for k in xrange(len(sent_x)):
+                x = sent_x[k]
+                y = sent_y[k]
+                theano_x.append(x)
+                theano_y.append(y)
                 index += 1
 
     assert len(batch_index) == len(sent_length)
-    return [shared(theano_c), shared(theano_l), shared(sent_length)], batch_index
+    return [shared(theano_x), shared(theano_y), shared(sent_length)], batch_index
 

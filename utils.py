@@ -39,3 +39,12 @@ def build_shared_zeros(shape):
         value=np.zeros(shape, dtype=theano.config.floatX),
         borrow=True
     )
+
+
+def logsumexp(x, axis):
+    """
+    :param x: 1D: batch, 2D: n_y, 3D: n_y
+    :return:
+    """
+    x_max = T.max(x, axis=axis, keepdims=True)
+    return T.log(T.sum(T.exp(x - x_max), axis=axis, keepdims=True)) + x_max

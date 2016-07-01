@@ -11,12 +11,13 @@ PAD = u'<PAD>'
 UNK = u'<UNK>'
 
 
-def load_ntc(path):
+def load_ntc(path, vocab_word=Vocab()):
     corpus = []
     word_freqs = defaultdict(int)
-    vocab_word = Vocab()
-    vocab_word.add_word(PAD)
-    vocab_word.add_word(UNK)
+
+    if vocab_word.size() == 0:
+        vocab_word.add_word(PAD)
+        vocab_word.add_word(UNK)
 
     with open(path) as f:
         prev_doc_id = None
@@ -51,6 +52,8 @@ def load_ntc(path):
             corpus.append(doc)
 
     for w, f in sorted(word_freqs.items(), key=lambda (k, v): -v):
+        if f < 2:
+            break
         vocab_word.add_word(w)
 
     return corpus, vocab_word
