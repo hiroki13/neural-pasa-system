@@ -16,6 +16,10 @@ class Word(object):
         self.pas_id = self.set_pas_id()
         self.is_prd = self.set_is_prd()
         self.case_arg_ids = self.set_case_arg_ids()  # cases: [Ga, O, Ni]; elem=arg id
+        self.Ga_type = -1
+        self.O_type = -1
+        self.Ni_type = -1
+        self.set_case_type()
 
     def set_pas_id(self):
         for p in self.pas_info:
@@ -65,3 +69,18 @@ class Word(object):
             case_arg_ids[case_label] = arg_id
 
         return case_arg_ids
+
+    def set_case_type(self):
+        if 'ga_type="dep"' in self.pas_info:
+            self.Ga_type = 1
+        elif 'ga_type="zero"' in self.pas_info:
+            self.Ga_type = 0
+        if 'o_type="dep"' in self.pas_info:
+            self.O_type = 1
+        elif 'o_type="zero"' in self.pas_info:
+            self.O_type = 0
+        if 'ni_type="dep"' in self.pas_info:
+            self.Ni_type = 1
+        elif 'ni_type="zero"' in self.pas_info:
+            self.Ni_type = 0
+

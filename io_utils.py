@@ -11,7 +11,7 @@ PAD = u'<PAD>'
 UNK = u'<UNK>'
 
 
-def load_ntc(path, vocab_word=Vocab()):
+def load_ntc(path, data_size=1000000, vocab_threshold=0, vocab_word=Vocab()):
     corpus = []
     word_freqs = defaultdict(int)
 
@@ -19,6 +19,7 @@ def load_ntc(path, vocab_word=Vocab()):
         vocab_word.add_word(PAD)
         vocab_word.add_word(UNK)
 
+    flag = True
     with open(path) as f:
         prev_doc_id = None
         doc = []
@@ -36,6 +37,10 @@ def load_ntc(path, vocab_word=Vocab()):
                     prev_doc_id = doc_id
                     corpus.append(doc)
                     doc = []
+
+                    if len(corpus) == data_size:
+                        flag = False
+                        break
                 elif prev_doc_id is None:
                     prev_doc_id = doc_id
             elif line.startswith('EOS'):  # Sent ends
@@ -48,15 +53,73 @@ def load_ntc(path, vocab_word=Vocab()):
                 sent.append(w)
                 w_index += 1
 
-        if doc:
+        if doc and flag:
             corpus.append(doc)
 
-    for w, f in sorted(word_freqs.items(), key=lambda (k, v): -v):
-        if f < 2:
+    for w, freq in sorted(word_freqs.items(), key=lambda (k, v): -v):
+        if freq == vocab_threshold:
             break
         vocab_word.add_word(w)
 
     return corpus, vocab_word
+
+
+def load_converted_ntc(path, vocab_word=Vocab()):
+    corpus = []
+    word_freqs = defaultdict(int)
+
+    if vocab_word.size() == 0:
+        vocab_word.add_word(PAD)
+        vocab_word.add_word(UNK)
+
+    with open(path) as freq:
+        prev_doc_id = None
+        doc = []
+        sent = []
+        doc_prds = []
+        sent_prds = []
+        prds = []
+        w_index = 0
+
+        for line in freq:
+            elem = line.rstrip().split()
+
+            if line.startswith('*'):
+                if elem[-1] == 'PRED':
+                    sent_prds.append(elem)
+            elif line.startswith('#'):  # Doc starts
+                doc_id = line.split()[1]
+                if prev_doc_id and prev_doc_id != doc_id:
+                    prev_doc_id = doc_id
+                    corpus.append(doc)
+                    prds.append(doc_prds)
+                    doc = []
+                    doc_prds = []
+                elif prev_doc_id is None:
+                    prev_doc_id = doc_id
+            elif line.startswith('EOS'):  # Sent ends
+                doc.append(sent)
+                doc_prds.append(sent_prds)
+                sent = []
+                sent_prds = []
+                w_index = 0
+            else:
+                w = Word(w_index, elem)
+                word_freqs[w.form] += 1
+                sent.append(w)
+                w_index += 1
+
+        if doc:
+            corpus.append(doc)
+            prds.append(doc_prds)
+
+    for w, freq in sorted(word_freqs.items(), key=lambda (k, v): -v):
+        if freq == 1:
+            break
+        vocab_word.add_word(w)
+
+    assert len(corpus) == len(prds)
+    return corpus, vocab_word, prds
 
 
 def dump_data(data, fn):
