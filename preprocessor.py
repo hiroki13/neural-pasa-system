@@ -124,10 +124,41 @@ def get_context(sent, prd_indices, window=5):
 
     for prd_index in prd_indices:
         prd_ctx = sent[prd_index: prd_index+window]
-        context.append([[sent[i]] + prd_ctx for i in xrange(sent_len)])
+        p_context = []
+
+        for i in xrange(sent_len):
+            c = [sent[i]] + prd_ctx
+#            c.append(get_mark(prd_index, i, window))
+            c.append(distance(prd_index, i))
+            p_context.append(c)
+        context.append(p_context)
+#        context.append([[sent[i]] + prd_ctx for i in xrange(sent_len)])
 
     assert len(context) == len(prd_indices)
     return context
+
+
+def get_mark(prd_index, arg_index, window):
+    slide = window / 2
+    if prd_index - slide <= arg_index <= prd_index + slide:
+        return 1
+    return 2
+
+
+def distance(prd_index, arg_index):
+    diff = prd_index - arg_index
+    if diff == 0 or diff == 1 or diff == 2 or diff == 3:
+        return diff + 1
+    elif 3 < diff < 11:
+        return 5
+    elif 11 <= diff:
+        return 6
+    elif diff == -1 or diff == -2 or diff == -3:
+        return diff * -1 + 6
+    elif -11 < diff < -3:
+        return 10
+    else:
+        return 11
 
 
 def corpus_statistics(corpus):

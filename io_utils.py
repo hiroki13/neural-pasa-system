@@ -9,6 +9,8 @@ from word import Word
 
 PAD = u'<PAD>'
 UNK = u'<UNK>'
+MARK = u'<MARK>'
+NMARK = u'<NMARK>'
 
 
 def load_ntc(path, data_size=1000000, vocab_threshold=0, vocab_word=Vocab()):
@@ -17,6 +19,9 @@ def load_ntc(path, data_size=1000000, vocab_threshold=0, vocab_word=Vocab()):
 
     if vocab_word.size() == 0:
         vocab_word.add_word(PAD)
+        for i in xrange(11):
+            vocab_word.add_word('<DISTANCE-%d>' % i)
+#        vocab_word.add_word(NMARK)
         vocab_word.add_word(UNK)
 
     flag = True

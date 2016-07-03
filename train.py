@@ -64,14 +64,14 @@ def train(argv):
     tr_indices = range(len(tr_batch_index))
     dev_indices = range(len(dev_batch_index))
     test_indices = range(len(test_batch_index))
+    best_dev_f1 = -1.
+    best_test_f1 = -1.
 
     for epoch in xrange(argv.epoch):
         print '\nEpoch: %d' % (epoch + 1)
         print '  TRAIN\n\t',
 
         np.random.shuffle(tr_indices)
-        best_dev_f1 = -1.
-        best_test_f1 = -1.
         ttl_p = np.zeros(3, dtype='float32')
         ttl_r = np.zeros(3, dtype='float32')
         crr = np.zeros(3, dtype='float32')
@@ -79,7 +79,7 @@ def train(argv):
         start = time.time()
 
         for index, b_index in enumerate(tr_indices):
-            if index != 0 and index % 100 == 0:
+            if index != 0 and index % 1000 == 0:
                 print index,
                 sys.stdout.flush()
 
@@ -140,7 +140,7 @@ def predict(f, batch_index, indices):
     start = time.time()
 
     for index, b_index in enumerate(indices):
-        if index != 0 and index % 100 == 0:
+        if index != 0 and index % 1000 == 0:
             print index,
             sys.stdout.flush()
 

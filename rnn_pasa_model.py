@@ -9,7 +9,8 @@ import theano.tensor as T
 
 
 class Model(object):
-    def __init__(self, x, y, n_words, window, opt, lr, init_emb, dim_emb, dim_hidden, dim_out, n_vocab, L2_reg, unit, n_layers=2):
+    def __init__(self, x, y, n_words, window, opt, lr, init_emb, dim_emb, dim_hidden, dim_out,
+                 n_vocab, L2_reg, unit, n_layers=2):
         self.tr_inputs = [x, y, n_words]
         self.pr_inputs = [x, y, n_words]
 
@@ -17,7 +18,7 @@ class Model(object):
         self.y = y  # original r: 1D: batch * n_cands; elem=label
 
         batch_size = x.shape[0] / n_words
-        n_fin = dim_emb * window
+        n_fin = dim_emb * (window + 1)
         self.y_reshaped = y.reshape((batch_size, n_words))
 
         if unit == 'lstm':
