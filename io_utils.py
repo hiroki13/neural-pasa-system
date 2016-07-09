@@ -13,7 +13,7 @@ MARK = u'<MARK>'
 NMARK = u'<NMARK>'
 
 
-def load_ntc(path, data_size=1000000, vocab_threshold=0, vocab_word=Vocab()):
+def load_ntc(path, data_size=1000000, vocab_threshold=0, model='word', vocab_word=Vocab()):
     corpus = []
     word_freqs = defaultdict(int)
 
@@ -54,7 +54,11 @@ def load_ntc(path, data_size=1000000, vocab_threshold=0, vocab_word=Vocab()):
                 w_index = 0
             else:
                 w = Word(w_index, elem)
-                word_freqs[w.form] += 1
+                if model == 'word':
+                    word_freqs[w.form] += 1
+                else:
+                    for c in w.chars:
+                        word_freqs[c] += 1
                 sent.append(w)
                 w_index += 1
 

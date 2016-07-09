@@ -10,7 +10,59 @@ O = 2
 Ni = 3
 
 
-def get_sample_info(corpus, vocab_word, vocab_label=Vocab(), window=5):
+def set_init_vocab_label(vocab_label, model):
+    if model == 'word':
+        vocab_label.add_word('NA')
+        vocab_label.add_word('Ga')
+        vocab_label.add_word('O')
+        vocab_label.add_word('Ni')
+        vocab_label.add_word('V')
+    else:
+        vocab_label.add_word('NA')
+        for i in ['Ga', 'O', 'Ni', 'V']:
+            vocab_label.add_word('B-' + i)
+            vocab_label.add_word('I-' + i)
+    return vocab_label
+
+
+def get_ids(sent, vocab, model):
+    ids = []
+    if model == 'word':
+        """ Get word ids """
+        for w in sent:
+            if w.form not in vocab.w2i:
+                w_id = vocab.get_id(UNK)
+            else:
+                w_id = vocab.get_id(w.form)
+            ids.append(w_id)
+    else:
+        """ Get char ids """
+        for w in sent:
+            for c in w.chars:
+                if c not in vocab.w2i:
+                    c_id = vocab.get_id(UNK)
+                else:
+                    c_id = vocab.get_id(c)
+                ids.append(c_id)
+    return ids
+
+
+def get_sorted_corpus(corpus, model):
+    sorted_corpus = []
+    for doc in corpus:
+        for sent in doc:
+            if model == 'word':
+                sorted_corpus.append((len(sent), sent))
+            else:
+                char_len = 0
+                for w in sent:
+                    char_len += len(w.chars)
+                sorted_corpus.append((char_len, sent))
+    sorted_corpus.sort(key=lambda x: x[0])
+    return [sent[1] for sent in sorted_corpus]
+
+
+def get_sample_info(corpus, vocab_word, model='char', vocab_label=Vocab(), window=5):
     """
     :param corpus: 1D: n_docs, 2D: n_sents, 3D: n_words; elem=Word
     :return: samples: 1D: n_sents, 2D: n_prds, 3D: n_chars, 4D: [char_id, ctx_ids, prd_id, tag_id]
@@ -22,11 +74,7 @@ def get_sample_info(corpus, vocab_word, vocab_label=Vocab(), window=5):
     contexts = []
 
     if vocab_label.size() == 0:
-        vocab_label.add_word('NA')
-        vocab_label.add_word('Ga')
-        vocab_label.add_word('O')
-        vocab_label.add_word('Ni')
-        vocab_label.add_word('V')
+        vocab_label = set_init_vocab_label(vocab_label, model)
 
     sorted_corpus = []
     for doc in corpus:
@@ -35,18 +83,14 @@ def get_sample_info(corpus, vocab_word, vocab_label=Vocab(), window=5):
     sorted_corpus.sort(key=lambda x: len(x))
 
     for sent in sorted_corpus:
-        tmp_word_ids = []
-        for w in sent:
-            """ Get word ids """
-            if w.form not in vocab_word.w2i:
-                w_id = vocab_word.get_id(UNK)
-            else:
-                w_id = vocab_word.get_id(w.form)
-
-            tmp_word_ids.append(w_id)
+        """ Get word (char) ids """
+        tmp_word_ids = get_ids(sent, vocab_word, model)
 
         """ Get labels """
-        tmp_labels, tmp_prd_indices = get_label(sent, vocab_label)
+        if model == 'word':
+            tmp_labels, tmp_prd_indices = get_label(sent, vocab_label)
+        else:
+            tmp_labels, tmp_prd_indices = get_label_char(sent, vocab_label)
 
         if len(tmp_prd_indices) == 0:
             continue
@@ -107,6 +151,70 @@ def get_label(sent, vocab_label):
             prd_indices.append(word.index)
 
     return labels, prd_indices
+
+
+def get_label_char(sent, vocab_label):
+    """
+    :param sent: 1D: n_words, 2D: (word, pas_info, pas_id)
+    :return: tag_ids: 1D: n_prds, 2D: n_chars; elem=tag_id
+    :return: prd_indices: 1D: n_prds, 2D: n_chars of prd; elem=char index
+    """
+
+    labels = []
+    prd_indices = []
+
+    char_index = 0
+    for word in sent:
+        if word.is_prd:  # check if the word is predicate or not
+            p_labels = []
+
+            for arg in sent:
+                case_label = None
+
+                # case_arg_ids: [Ga_arg_id, O_arg_id, Ni_arg_id]
+                for case_i, case_arg_id in enumerate(word.case_arg_ids):
+                    if arg.pas_id > -1 and arg.pas_id == case_arg_id:
+                        if case_i+1 == Ga:
+                            case_label = 'Ga'
+                        elif case_i+1 == O:
+                            case_label = 'O'
+                        elif case_i+1 == Ni:
+                            case_label = 'Ni'
+                        break
+
+                if word.index == arg.index:
+                    case_label = 'V'
+
+                if case_label is None:
+                    case_label = 'NA'
+
+                p_labels.extend(get_char_label(arg, case_label, vocab_label))
+
+            for label in p_labels:
+                if 0 < label < 7:
+                    break
+            else:
+                continue
+
+            labels.append(p_labels)
+            prd_indices.append(char_index)
+        char_index += len(word.chars)
+
+    return labels, prd_indices
+
+
+def get_char_label(word, case_label, vocab_label):
+    labels = []
+    if case_label == 'NA':
+        return [vocab_label.get_id(case_label) for c in word.chars]
+
+    for i, c in enumerate(word.chars):
+        if i == 0:
+            labels.append(vocab_label.get_id('B-' + case_label))
+        else:
+            labels.append(vocab_label.get_id('I-' + case_label))
+
+    return labels
 
 
 def get_context(sent, prd_indices, window=5):
@@ -206,33 +314,32 @@ def corpus_statistics(corpus):
     print
 
 
-def sample_statistics(samples):
+def sample_statistics(samples, vocab_label):
     print 'SAMPLE STATISTICS'
 
     n_samples = 0
     n_args = 0
-    case_dict = {'Ga': 0, 'O': 0, 'Ni': 0}
+
+    label_count = {}
+    for key in vocab_label.w2i.keys():
+        label_count[key] = 0
+    n_labels = vocab_label.size()
 
     for sent in samples:
         for prd_labels in sent:
             flag = False
             for label in prd_labels:
-                if 0 < label < 4:
+                label_count[vocab_label.get_word(label)] += 1
+                if 0 < label < n_labels-1:
                     n_args += 1
-                    if label == 1:
-                        case_dict['Ga'] += 1
-                    elif label == 2:
-                        case_dict['O'] += 1
-                    else:
-                        case_dict['Ni'] += 1
-
                     flag = True
             if flag:
                 n_samples += 1
 
     print '\tSamples: %d' % n_samples
-    for case, count in case_dict.items():
-        print '\t%s: %d' % (case, count),
+    print '\t',
+    for case, count in label_count.items():
+        print '%s: %d  ' % (case, count),
     print
 
 

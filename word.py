@@ -8,6 +8,7 @@ class Word(object):
     def __init__(self, index, elem, file_encoding='utf-8'):
         self.index = index
         self.form = elem[0].decode(file_encoding)
+        self.chars = [c for c in self.form]
         self.pas_info = elem[-1].decode(file_encoding).split('/')
         """ An example of the pas_info:
             [u'alt="active"', u'ga="2"', u'ga_type="dep"', u'ni="1"', u'ni_type="dep"', u'type="pred"']

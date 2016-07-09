@@ -7,7 +7,7 @@ if __name__ == '__main__':
     import argparse
     import train
 
-    parser = argparse.ArgumentParser(description='Train NN tagger.')
+    parser = argparse.ArgumentParser(description='Train NN PAS System')
 
     """ Mode """
     parser.add_argument('-mode', default='train', help='train/test')
