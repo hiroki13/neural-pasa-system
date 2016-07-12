@@ -13,15 +13,16 @@ MARK = u'<MARK>'
 NMARK = u'<NMARK>'
 
 
-def load_ntc(path, data_size=1000000, vocab_threshold=0, model='word', vocab_word=Vocab()):
+def load_ntc(path, data_size=1000000, vocab_size=0, model='word', vocab_word=Vocab()):
     corpus = []
     word_freqs = defaultdict(int)
 
     if vocab_word.size() == 0:
         vocab_word.add_word(PAD)
-        for i in xrange(11):
-            vocab_word.add_word('<DISTANCE-%d>' % i)
-#        vocab_word.add_word(NMARK)
+#        for i in xrange(11):
+#            vocab_word.add_word('<DISTANCE-%d>' % i)
+        vocab_word.add_word(MARK)
+        vocab_word.add_word(NMARK)
         vocab_word.add_word(UNK)
 
     flag = True
@@ -66,7 +67,7 @@ def load_ntc(path, data_size=1000000, vocab_threshold=0, model='word', vocab_wor
             corpus.append(doc)
 
     for w, freq in sorted(word_freqs.items(), key=lambda (k, v): -v):
-        if freq == vocab_threshold:
+        if freq == vocab_size:
             break
         vocab_word.add_word(w)
 

@@ -14,11 +14,11 @@ class Model(object):
         self.tr_inputs = [x, y, n_words]
         self.pr_inputs = [x, y, n_words]
 
-        self.x = x  # original c: 1D: batch * n_words, 2D: window; elem=word_id
-        self.y = y  # original r: 1D: batch * n_cands; elem=label
+        self.x = x  # original x: 1D: batch * n_words, 2D: window + 1; elem=word_id
+        self.y = y  # original y: 1D: batch * n_cands; elem=label
 
         batch_size = x.shape[0] / n_words
-        n_fin = dim_emb * (window + 1)
+        n_fin = dim_emb * window
         self.y_reshaped = y.reshape((batch_size, n_words))
 
         if unit == 'lstm':

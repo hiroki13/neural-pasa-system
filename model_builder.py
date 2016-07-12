@@ -2,7 +2,6 @@ import theano
 import theano.tensor as T
 
 import rnn_pasa_model
-from utils import relu, tanh
 
 
 def set_model(argv, emb, vocab_word, vocab_label):
@@ -11,7 +10,7 @@ def set_model(argv, emb, vocab_word, vocab_label):
     n_words = T.iscalar('n_words')
 
     """ Set the classifier parameters"""
-    window = argv.window + 1
+    window = argv.window * 2 + 1
     opt = argv.opt
     lr = argv.lr
     init_emb = emb

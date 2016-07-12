@@ -5,15 +5,15 @@ theano.config.floatX = 'float32'
 
 if __name__ == '__main__':
     import argparse
-    import train
 
     parser = argparse.ArgumentParser(description='Train NN PAS System')
 
     """ Mode """
-    parser.add_argument('-mode', default='train', help='train/test')
+    parser.add_argument('-mode', default='train', help='train/test/stats')
 
     """ Model """
-    parser.add_argument('--model', default='char', help='word/char')
+    parser.add_argument('--model', default='word', help='word/char')
+    parser.add_argument('--check', type=bool, default=False, help='check')
     parser.add_argument('--save', type=bool, default=True, help='save model')
     parser.add_argument('--load', type=str, default=None, help='load model')
 
@@ -33,7 +33,6 @@ if __name__ == '__main__':
     parser.add_argument('--layer',  type=int, default=1,         help='number of layers')
 
     """ Training Parameters """
-    parser.add_argument('--v_threshold', type=int, default=1, help='vocab threshold')
     parser.add_argument('--batch_size', type=int, default=32, help='mini batch size')
     parser.add_argument('--opt', default='adam', help='optimization method')
     parser.add_argument('--epoch', type=int, default=50, help='number of epochs to train')
@@ -41,7 +40,11 @@ if __name__ == '__main__':
     parser.add_argument('--reg', type=float, default=0.0001, help='learning rate')
     parser.add_argument('--init_emb', default=None, help='Initial embedding to be loaded')
 
-    args = parser.parse_args()
+    argv = parser.parse_args()
 
-    train.main(args)
-
+    if argv.mode == 'train':
+        import train
+        train.main(argv)
+    else:
+        import stats
+        stats.main(argv)

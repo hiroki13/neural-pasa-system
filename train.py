@@ -3,7 +3,7 @@ import time
 import numpy as np
 
 import io_utils
-from preprocessor import get_sample_info, theano_format, corpus_statistics, sample_statistics
+from preprocessor import get_sample_info, theano_format, corpus_statistics, sample_statistics, check_samples
 from model_builder import set_model, set_train_f, set_pred_f
 
 
@@ -14,9 +14,9 @@ def train(argv):
 
     """ Load files """
     # corpus: 1D: n_sents, 2D: n_words, 3D: (word, pas_info, pas_id)
-    tr_corpus, vocab_word = io_utils.load_ntc(argv.train_data, argv.data_size, argv.v_threshold, argv.model)
-    dev_corpus, vocab_word = io_utils.load_ntc(argv.dev_data, argv.data_size, argv.v_threshold, argv.model, vocab_word)
-    test_corpus, vocab_word = io_utils.load_ntc(argv.test_data, argv.data_size, argv.v_threshold, argv.model, vocab_word)
+    tr_corpus, vocab_word = io_utils.load_ntc(argv.train_data, argv.data_size, argv.vocab_size, argv.model)
+    dev_corpus, vocab_word = io_utils.load_ntc(argv.dev_data, argv.data_size, argv.vocab_size, argv.model, vocab_word)
+    test_corpus, vocab_word = io_utils.load_ntc(argv.test_data, argv.data_size, argv.vocab_size, argv.model, vocab_word)
 
     print '\nVocab: %d\tType: %s\n' % (vocab_word.size(), argv.model)
     print '\nTRAIN',
@@ -27,16 +27,16 @@ def train(argv):
     corpus_statistics(test_corpus)
 
     """ Preprocessing """
-    # samples: 1D: n_sents, 2D: [word_ids, tag_ids, prd_indices, contexts]
+    # samples: (word_ids, tag_ids, prd_indices, contexts)
+    # word_ids: 1D: n_sents, 2D: n_words
+    # tag_ids: 1D: n_sents, 2D: n_prds, 3D: n_words
+    # prd_indices: 1D: n_sents, 2D: n_prds
+    # contexts: 1D: n_sents, 2D: n_prds, 3D: n_words, 4D: window + 2
     # vocab_tags: {NA(Not-Arg):0, Ga:1, O:2, Ni:3, V:4}
-    tr_pre_samples, vocab_label = get_sample_info(tr_corpus, vocab_word, argv.model)
-    dev_pre_samples, vocab_label = get_sample_info(dev_corpus, vocab_word, argv.model, vocab_label)
-    test_pre_samples, vocab_label = get_sample_info(test_corpus, vocab_word, argv.model, vocab_label)
+    tr_pre_samples, vocab_label = get_sample_info(tr_corpus, vocab_word, argv.model, window=argv.window)
+    dev_pre_samples, vocab_label = get_sample_info(dev_corpus, vocab_word, argv.model, vocab_label, argv.window)
+    test_pre_samples, vocab_label = get_sample_info(test_corpus, vocab_word, argv.model, vocab_label, argv.window)
     print '\nLabel: %d\n' % vocab_label.size()
-
-#    print tr_pre_samples[1][1][0]
-#    print get_spans(tr_pre_samples[1][1][0])
-#    exit()
 
     print '\nTRAIN',
     sample_statistics(tr_pre_samples[1], vocab_label)
@@ -44,6 +44,9 @@ def train(argv):
     sample_statistics(dev_pre_samples[1], vocab_label)
     print '\nTEST',
     sample_statistics(test_pre_samples[1], vocab_label)
+
+    if argv.check:
+        check_samples(tr_pre_samples, vocab_word, vocab_label)
 
     # dataset: (labels, contexts, sent_length)
     tr_samples, tr_batch_index = theano_format(tr_pre_samples)

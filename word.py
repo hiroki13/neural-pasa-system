@@ -10,19 +10,22 @@ class Word(object):
         self.form = elem[0].decode(file_encoding)
         self.chars = [c for c in self.form]
         self.pas_info = elem[-1].decode(file_encoding).split('/')
-        """ An example of the pas_info:
-            [u'alt="active"', u'ga="2"', u'ga_type="dep"', u'ni="1"', u'ni_type="dep"', u'type="pred"']
+
+        """
+        An example of the pas_info:
+        [u'alt="active"', u'ga="2"', u'ga_type="dep"', u'ni="1"', u'ni_type="dep"', u'type="pred"']
         """
 
-        self.pas_id = self.set_pas_id()
+        self.id = self.set_id()
         self.is_prd = self.set_is_prd()
         self.case_arg_ids = self.set_case_arg_ids()  # cases: [Ga, O, Ni]; elem=arg id
-        self.Ga_type = -1
-        self.O_type = -1
-        self.Ni_type = -1
-        self.set_case_type()
+        self.case_types = [-1, -1, -1]
+        self.case_arg_index = [-1, -1, -1]
 
-    def set_pas_id(self):
+        self.chunk_index = -1
+        self.chunk_head = -1
+
+    def set_id(self):
         for p in self.pas_info:
             if 'id=' == p[:3]:
                 m = re.search("\d+", p)
@@ -71,17 +74,35 @@ class Word(object):
 
         return case_arg_ids
 
-    def set_case_type(self):
-        if 'ga_type="dep"' in self.pas_info:
-            self.Ga_type = 1
-        elif 'ga_type="zero"' in self.pas_info:
-            self.Ga_type = 0
-        if 'o_type="dep"' in self.pas_info:
-            self.O_type = 1
-        elif 'o_type="zero"' in self.pas_info:
-            self.O_type = 0
-        if 'ni_type="dep"' in self.pas_info:
-            self.Ni_type = 1
-        elif 'ni_type="zero"' in self.pas_info:
-            self.Ni_type = 0
+    def set_cases(self, sent, doc):
+        # 0=bunsetsu, 1=dep, 2=intra-zero, 3=inter-zero, 4=exophora
 
+        if self.is_prd is False:
+            return
+
+        """ Intra-sentential arguments """
+        for w in sent:
+            for case_label, a_id in enumerate(self.case_arg_ids):
+                if w.id == a_id > -1:
+                    if w.chunk_index == self.chunk_index:
+                        case_type = 0
+                    elif w.chunk_index == self.chunk_head or w.chunk_head == self.chunk_index:
+                        case_type = 1
+                        self.case_arg_index[case_label] = w.index
+                    else:
+                        case_type = 2
+                        self.case_arg_index[case_label] = w.index
+                    self.case_types[case_label] = case_type
+#                    self.case_arg_index[case_label] = w.index
+
+        """ Inter-sentential zero arguments """
+        for prev_sent in doc:
+            for w in prev_sent:
+                for case_label, a_id in enumerate(self.case_arg_ids):
+                    if w.id == a_id > -1 and self.case_types[case_label] < 0:
+                        self.case_types[case_label] = 3
+
+        """ Exophora arguments """
+        for case_label, a_id in enumerate(self.case_arg_ids):
+            if 1000 < a_id:
+                self.case_types[case_label] = 4

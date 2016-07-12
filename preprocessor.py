@@ -103,13 +103,8 @@ def get_sample_info(corpus, vocab_word, model='char', vocab_label=Vocab(), windo
     assert len(word_ids) == len(labels) == len(prd_indices) == len(contexts)
     return (word_ids, labels, prd_indices, contexts), vocab_label
 
-
+"""
 def get_label(sent, vocab_label):
-    """
-    :param sent: 1D: n_words, 2D: (word, pas_info, pas_id)
-    :return: tag_ids: 1D: n_prds, 2D: n_chars; elem=tag_id
-    :return: prd_indices: 1D: n_prds, 2D: n_chars of prd; elem=char index
-    """
 
     labels = []
     prd_indices = []
@@ -123,7 +118,7 @@ def get_label(sent, vocab_label):
 
                 # case_arg_ids: [Ga_arg_id, O_arg_id, Ni_arg_id]
                 for case_i, case_arg_id in enumerate(word.case_arg_ids):
-                    if arg.pas_id > -1 and arg.pas_id == case_arg_id:
+                    if word.chunk_index != arg.chunk_index and arg.id > -1 and arg.id == case_arg_id:
                         if case_i+1 == Ga:
                             case_label = 'Ga'
                         elif case_i+1 == O:
@@ -151,6 +146,34 @@ def get_label(sent, vocab_label):
             prd_indices.append(word.index)
 
     return labels, prd_indices
+"""
+
+def get_label(sent, vocab_label):
+    """
+    :param sent: 1D: n_words, 2D: (word, pas_info, pas_id)
+    :return: tag_ids: 1D: n_prds, 2D: n_chars; elem=tag_id
+    :return: prd_indices: 1D: n_prds, 2D: n_chars of prd; elem=char index
+    """
+
+    labels = []
+    prd_indices = []
+
+    for word in sent:
+        if word.is_prd:  # check if the word is predicate or not
+            p_labels = [0 for i in xrange(len(sent))]
+            p_labels[word.index] = 4
+
+            is_arg = False
+            for case_label, arg_index in enumerate(word.case_arg_index):
+                if arg_index > -1:
+                    p_labels[arg_index] = case_label + 1
+                    is_arg = True
+
+            if is_arg:
+                labels.append(p_labels)
+                prd_indices.append(word.index)
+
+    return labels, prd_indices
 
 
 def get_label_char(sent, vocab_label):
@@ -173,7 +196,7 @@ def get_label_char(sent, vocab_label):
 
                 # case_arg_ids: [Ga_arg_id, O_arg_id, Ni_arg_id]
                 for case_i, case_arg_id in enumerate(word.case_arg_ids):
-                    if arg.pas_id > -1 and arg.pas_id == case_arg_id:
+                    if arg.id > -1 and arg.id == case_arg_id:
                         if case_i+1 == Ga:
                             case_label = 'Ga'
                         elif case_i+1 == O:
@@ -217,30 +240,30 @@ def get_char_label(word, case_label, vocab_label):
     return labels
 
 
-def get_context(sent, prd_indices, window=5):
+def get_context(sent_w_ids, prd_indices, window=5):
     """
-    :param sent: 1D: n_words; elem=word id
+    :param sent_w_ids: 1D: n_words; elem=word id
     :param prd_indices: 1D: n_prds; prd index
     :return: context: 1D: n_words, 2D: window+1; elem=word id
     """
 
     context = []
-    sent_len = len(sent)
     slide = window/2
+    sent_len = len(sent_w_ids)
     pad = [0 for i in xrange(slide)]
-    sent = pad + sent + pad
+    sent_w_ids = pad + sent_w_ids + pad
 
     for prd_index in prd_indices:
-        prd_ctx = sent[prd_index: prd_index+window]
+        prd_ctx = sent_w_ids[prd_index: prd_index + window]
         p_context = []
 
         for i in xrange(sent_len):
-            c = [sent[i]] + prd_ctx
-#            c.append(get_mark(prd_index, i, window))
-            c.append(distance(prd_index, i))
+#            c = [sent_w_ids[i + slide]] + prd_ctx
+            c = sent_w_ids[i: i + window] + prd_ctx
+            c.append(get_mark(prd_index, i, window))
+#            c.append(distance(prd_index, i))
             p_context.append(c)
         context.append(p_context)
-#        context.append([[sent[i]] + prd_ctx for i in xrange(sent_len)])
 
     assert len(context) == len(prd_indices)
     return context
@@ -312,6 +335,29 @@ def corpus_statistics(corpus):
     for case, count in case_dict.items():
         print '\t%s: %d' % (case, count),
     print
+
+
+def check_samples(samples, vocab_word, vocab_label):
+    # samples: (word_ids, tag_ids, prd_indices, contexts)
+    # word_ids: 1D: n_sents, 2D: n_words
+    # tag_ids: 1D: n_sents, 2D: n_prds, 3D: n_words
+    # prd_indices: 1D: n_sents, 2D: n_prds
+    # contexts: 1D: n_sents, 2D: n_prds, 3D: n_words, 4D: window + 2
+    labels = samples[1]
+    contexts = samples[-1]
+    assert len(labels) == len(contexts), '%d %d' % (len(labels), len(contexts))
+
+    for sent_labels, sent_context in zip(labels, contexts):
+        assert len(sent_labels) == len(sent_context), '%d %d' % (len(sent_labels), len(sent_context))
+
+        for p_labels, p_context in zip(sent_labels, sent_context):
+            assert len(p_labels) == len(p_context), '%d %d' % (len(p_labels), len(p_context))
+            for label, context in zip(p_labels, p_context):
+                for c in context:
+                    print vocab_word.get_word(c),
+                print vocab_label.get_word(label)
+            print
+    exit()
 
 
 def sample_statistics(samples, vocab_label):
