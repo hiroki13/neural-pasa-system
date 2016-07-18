@@ -1,16 +1,15 @@
 import theano
 import theano.tensor as T
 
-import rnn_pasa_model
+from pasa_model import Model
 
 
 def set_model(argv, emb, vocab_word, vocab_label):
     x = T.imatrix('x')
-    y = T.ivector('y')
-    n_words = T.iscalar('n_words')
+    n_cands = T.iscalar('n_cands')
 
     """ Set the classifier parameters"""
-    window = argv.window * 2 + 1
+    window = argv.window * 2
     opt = argv.opt
     lr = argv.lr
     init_emb = emb
@@ -22,9 +21,8 @@ def set_model(argv, emb, vocab_word, vocab_label):
     unit = argv.unit
     n_layers = argv.layer
 
-    model = rnn_pasa_model.Model(x=x, y=y, n_words=n_words, window=window, opt=opt, lr=lr, init_emb=init_emb, dim_emb=dim_emb,
-                                 dim_hidden=dim_hidden, dim_out=dim_out, n_vocab=n_vocab, L2_reg=L2_reg, unit=unit, n_layers=n_layers)
-    return model
+    return Model(x=x, n_cands=n_cands, window=window, opt=opt, lr=lr, init_emb=init_emb, dim_emb=dim_emb,
+                 dim_hidden=dim_hidden, dim_out=dim_out, n_vocab=n_vocab, L2_reg=L2_reg, unit=unit, n_layers=n_layers)
 
 
 def set_train_f(model, tr_samples):
@@ -33,12 +31,11 @@ def set_train_f(model, tr_samples):
     eos = T.iscalar('eos')
 
     train_f = theano.function(inputs=[index, bos, eos],
-                              outputs=[model.y_pred, model.nll, model.y_reshaped],
+                              outputs=[model.corrects, model.nll],
                               updates=model.update,
                               givens={
                                   model.tr_inputs[0]: tr_samples[0][bos: eos],
-                                  model.tr_inputs[1]: tr_samples[1][bos: eos],
-                                  model.tr_inputs[2]: tr_samples[2][index],
+                                  model.tr_inputs[1]: tr_samples[1][index]
                               }
                               )
     return train_f
@@ -50,11 +47,10 @@ def set_pred_f(model, samples):
     eos = T.iscalar('eos')
 
     pred_f = theano.function(inputs=[index, bos, eos],
-                             outputs=[model.y_pred, model.y_reshaped],
+                             outputs=model.corrects,
                              givens={
                                  model.pr_inputs[0]: samples[0][bos: eos],
-                                 model.pr_inputs[1]: samples[1][bos: eos],
-                                 model.pr_inputs[2]: samples[2][index],
+                                 model.pr_inputs[1]: samples[1][index]
                              }
                              )
     return pred_f

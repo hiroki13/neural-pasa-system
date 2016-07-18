@@ -1,7 +1,8 @@
 import numpy as np
 import theano
+import random
 
-from vocab import Vocab
+from ling.vocab import Vocab
 
 UNK = u'<UNK>'
 
@@ -10,18 +11,12 @@ O = 2
 Ni = 3
 
 
-def set_init_vocab_label(vocab_label, model):
-    if model == 'word':
-        vocab_label.add_word('NA')
-        vocab_label.add_word('Ga')
-        vocab_label.add_word('O')
-        vocab_label.add_word('Ni')
-        vocab_label.add_word('V')
-    else:
-        vocab_label.add_word('NA')
-        for i in ['Ga', 'O', 'Ni', 'V']:
-            vocab_label.add_word('B-' + i)
-            vocab_label.add_word('I-' + i)
+def set_init_vocab_labels(vocab_label):
+    vocab_label.add_word('NA')
+    vocab_label.add_word('Ga')
+    vocab_label.add_word('O')
+    vocab_label.add_word('Ni')
+    vocab_label.add_word('V')
     return vocab_label
 
 
@@ -47,6 +42,23 @@ def get_ids(sent, vocab, model):
     return ids
 
 
+def get_corpus_ids(corpus, vocab):
+    ids = []
+    for doc in corpus:
+        doc_ids = []
+        for sent in doc:
+            sent_ids = []
+            for w in sent:
+                if w.form not in vocab.w2i:
+                    w_id = vocab.get_id(UNK)
+                else:
+                    w_id = vocab.get_id(w.form)
+                sent_ids.append(w_id)
+            doc_ids.append(sent_ids)
+        ids.append(doc_ids)
+    return ids
+
+
 def get_sorted_corpus(corpus, model):
     sorted_corpus = []
     for doc in corpus:
@@ -62,7 +74,7 @@ def get_sorted_corpus(corpus, model):
     return [sent[1] for sent in sorted_corpus]
 
 
-def get_sample_info(corpus, vocab_word, model='char', vocab_label=Vocab(), window=5):
+def get_sample_info(corpus, vocab_word, vocab_label=Vocab(), window=5):
     """
     :param corpus: 1D: n_docs, 2D: n_sents, 3D: n_words; elem=Word
     :return: samples: 1D: n_sents, 2D: n_prds, 3D: n_chars, 4D: [char_id, ctx_ids, prd_id, tag_id]
@@ -74,7 +86,7 @@ def get_sample_info(corpus, vocab_word, model='char', vocab_label=Vocab(), windo
     contexts = []
 
     if vocab_label.size() == 0:
-        vocab_label = set_init_vocab_label(vocab_label, model)
+        vocab_label = set_init_vocab_labels(vocab_label)
 
     sorted_corpus = []
     for doc in corpus:
@@ -84,7 +96,7 @@ def get_sample_info(corpus, vocab_word, model='char', vocab_label=Vocab(), windo
 
     for sent in sorted_corpus:
         """ Get word (char) ids """
-        tmp_word_ids = get_ids(sent, vocab_word, model)
+        tmp_word_ids = get_ids(sent, vocab_word)
 
         """ Get labels """
         if model == 'word':
@@ -102,6 +114,34 @@ def get_sample_info(corpus, vocab_word, model='char', vocab_label=Vocab(), windo
 
     assert len(word_ids) == len(labels) == len(prd_indices) == len(contexts)
     return (word_ids, labels, prd_indices, contexts), vocab_label
+
+
+def get_inter_samples(corpus, vocab_word, model='word', vocab_label=Vocab(), window=5):
+    """
+    :param corpus: 1D: n_docs, 2D: n_sents, 3D: n_words; elem=Word
+    :return: samples: 1D: n_sents, 2D: n_prds, 3D: n_chars, 4D: [char_id, ctx_ids, prd_id, tag_id]
+    """
+
+    x = []
+    y = []
+
+    if vocab_label.size() == 0:
+        vocab_label = set_init_vocab_labels(vocab_label, model)
+
+    corpus_ids = get_corpus_ids(corpus, vocab_word)
+    for i, doc in enumerate(corpus):
+        for sent in doc:
+            x_i, y_i = get_one_inter_sample(sent, doc, corpus_ids[i], window)
+
+            if len(y_i) == 0:
+                continue
+
+            x.extend(x_i)
+            y.extend(y_i)
+
+    assert len(x) == len(y)
+    return (x, y), vocab_label
+
 
 """
 def get_label(sent, vocab_label):
@@ -174,6 +214,66 @@ def get_label(sent, vocab_label):
                 prd_indices.append(word.index)
 
     return labels, prd_indices
+
+
+def get_one_inter_sample(sent, doc, doc_ids, window=5, case=0):
+    """
+    :param sent: 1D: n_words; elem=Word()
+    :param doc: 1D: n_sents, 2D: n_words; elem=Word()
+    :param doc_ids: 1D: n_sents, 2D: n_words; elem=word id
+    :return: x:
+    :return: y:
+    """
+
+    x = []
+    y = []
+
+    for word in sent:
+        if word.is_prd is False:  # check if the word is predicate or not
+            continue
+
+        for case_label, arg_indices in enumerate(word.inter_case_arg_index):
+            if case_label != case:
+                continue
+
+            for arg_index in arg_indices:  # [(doc_index, index), ...]
+                arg = doc[arg_index[0]][arg_index[1]]
+                x.append(get_feature(word, arg, doc_ids, window))
+                y.append(1)
+
+                x_neg = get_neg_feature(word, arg, doc, doc_ids, 1, window)
+                x.extend(x_neg)
+                y.extend([0 for i in xrange(len(x_neg))])
+
+    return x, y
+
+
+def get_neg_feature(prd, arg, doc, doc_ids, n_negs=1, window=5):
+    neg_feature = []
+    doc_indices = range(prd.sent_index)
+    for i in xrange(n_negs):
+        random.shuffle(doc_indices)
+        sent = doc[doc_indices[0]]
+        sent_indices = range(len(sent))
+        if len(sent_indices) < 2:
+            continue
+        random.shuffle(sent_indices)
+        arg_neg = sent[sent_indices[0]] if sent_indices[0] != arg.index else sent[sent_indices[1]]
+        neg_feature.append(get_feature(prd, arg_neg, doc_ids, window))
+    return neg_feature
+
+
+def get_feature(prd, arg, doc, window=5):
+    slide = window/2
+    pad = [0 for i in xrange(slide)]
+
+    sent_p = doc[prd.sent_index]
+    sent_p_ids = pad + sent_p + pad
+
+    sent_a = doc[arg.sent_index]
+    sent_a_ids = pad + sent_a + pad
+
+    return sent_a_ids[arg.index: arg.index + window] + sent_p_ids[arg.index: arg.index + window]
 
 
 def get_label_char(sent, vocab_label):
@@ -390,6 +490,49 @@ def sample_statistics(samples, vocab_label):
 
 
 def theano_format(samples, batch_size=32):
+    def shared(_sample):
+        return theano.shared(np.asarray(_sample, dtype='int32'), borrow=True)
+
+    theano_x = []
+    theano_y = []
+    batch_index = []
+    sent_length = []
+
+    sample_x = samples[-1]
+    sample_y = samples[1]
+
+    prev_n_words = len(sample_x[0][0])
+    prev_index = 0
+    index = 0
+
+    for i in xrange(len(sample_x)):
+        prd_x = sample_x[i]  # 1D: n_prds, 2D: n_words, 3D: window; word_id
+        prd_y = sample_y[i]
+
+        """ Check the boundary of batches """
+        n_words = len(prd_x[0])
+        if prev_n_words != n_words or index - prev_index > batch_size:
+            batch_index.append((prev_index, index))
+            sent_length.append(prev_n_words)
+            prev_index = index
+            prev_n_words = n_words
+
+        for j in xrange(len(prd_x)):
+            sent_x = prd_x[j]
+            sent_y = prd_y[j]
+
+            for k in xrange(len(sent_x)):
+                x = sent_x[k]
+                y = sent_y[k]
+                theano_x.append(x)
+                theano_y.append(y)
+                index += 1
+
+    assert len(batch_index) == len(sent_length)
+    return [shared(theano_x), shared(theano_y), shared(sent_length)], batch_index
+
+
+def theano_format_inter(samples, batch_size=32):
     def shared(_sample):
         return theano.shared(np.asarray(_sample, dtype='int32'), borrow=True)
 

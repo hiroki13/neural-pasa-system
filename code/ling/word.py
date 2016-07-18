@@ -21,7 +21,9 @@ class Word(object):
         self.case_arg_ids = self.set_case_arg_ids()  # cases: [Ga, O, Ni]; elem=arg id
         self.case_types = [-1, -1, -1]
         self.case_arg_index = [-1, -1, -1]
+        self.inter_case_arg_index = [[], [], []]
 
+        self.sent_index = -1
         self.chunk_index = -1
         self.chunk_head = -1
 
@@ -93,14 +95,14 @@ class Word(object):
                         case_type = 2
                         self.case_arg_index[case_label] = w.index
                     self.case_types[case_label] = case_type
-#                    self.case_arg_index[case_label] = w.index
 
         """ Inter-sentential zero arguments """
-        for prev_sent in doc:
+        for i, prev_sent in enumerate(doc):
             for w in prev_sent:
                 for case_label, a_id in enumerate(self.case_arg_ids):
                     if w.id == a_id > -1 and self.case_types[case_label] < 0:
                         self.case_types[case_label] = 3
+                        self.inter_case_arg_index[case_label].append((i, w.index))
 
         """ Exophora arguments """
         for case_label, a_id in enumerate(self.case_arg_ids):

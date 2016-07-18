@@ -48,3 +48,7 @@ def logsumexp(x, axis):
     """
     x_max = T.max(x, axis=axis, keepdims=True)
     return T.log(T.sum(T.exp(x - x_max), axis=axis, keepdims=True)) + x_max
+
+
+def L2_sqr(params):
+    return reduce(lambda a, b: a + T.sum(b ** 2), params, 0.)

@@ -1,3 +1,19 @@
+PAD = u'<PAD>'
+UNK = u'<UNK>'
+MARK = u'<MARK>'
+NMARK = u'<NMARK>'
+
+NA = u'NA'
+GA = u'Ga'
+O = u'O'
+NI = u'Ni'
+PRD = u'V'
+
+GA_LABEL = 0
+O_LABEL = 1
+NI_LABEL = 2
+
+
 class Vocab(object):
 
     def __init__(self):
@@ -15,6 +31,25 @@ class Vocab(object):
 
     def get_word(self, w_id):
         return self.i2w[w_id]
+
+    def set_init_word(self):
+        self.add_word(PAD)
+        self.add_word(MARK)
+        self.add_word(NMARK)
+        self.add_word(UNK)
+
+    def set_pas_labels(self):
+        self.add_word(NA)
+        self.add_word(GA)
+        self.add_word(O)
+        self.add_word(NI)
+        self.add_word(PRD)
+
+    def add_vocab(self, word_freqs, vocab_cut_off=0):
+        for w, freq in sorted(word_freqs.items(), key=lambda (k, v): -v):
+            if freq == vocab_cut_off:
+                break
+            self.add_word(w)
 
     def size(self):
         return len(self.i2w)

@@ -1,8 +1,7 @@
-from utils import sample_weights, build_shared_zeros, sigmoid, tanh
-from optimizers import ada_grad, ada_delta, adam, sgd
-import gru
-import lstm
-from crf import y_prob, vitabi
+from nn.utils import sample_weights, build_shared_zeros, L2_sqr
+from nn.optimizers import ada_grad, ada_delta, adam, sgd
+from nn import gru, lstm
+from nn.crf import y_prob, vitabi
 
 import theano
 import theano.tensor as T
@@ -57,6 +56,3 @@ class Model(object):
         else:
             self.update = sgd(cost=self.cost, params=self.params, lr=lr)
 
-
-def L2_sqr(params):
-    return reduce(lambda a, b: a + T.sum(b ** 2), params, 0.)

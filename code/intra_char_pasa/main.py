@@ -6,10 +6,10 @@ theano.config.floatX = 'float32'
 if __name__ == '__main__':
     import argparse
 
-    parser = argparse.ArgumentParser(description='Train NN PAS System')
+    parser = argparse.ArgumentParser(description='The Neural PAS System')
 
     """ Mode """
-    parser.add_argument('-mode', default='train', help='train/test/stats')
+    parser.add_argument('-mode', default='train', help='train/test')
 
     """ Model """
     parser.add_argument('--model', default='word', help='word/char')
@@ -21,7 +21,6 @@ if __name__ == '__main__':
     parser.add_argument('--train_data', help='path to training data')
     parser.add_argument('--dev_data', help='path to development data')
     parser.add_argument('--test_data', help='path to test data')
-    parser.add_argument('--true_data', help='path to true data')
     parser.add_argument('--data_size', type=int, default=100000)
     parser.add_argument('--vocab_size', type=int, default=100000000)
 
@@ -42,9 +41,10 @@ if __name__ == '__main__':
 
     argv = parser.parse_args()
 
+    """ Mode  """
     if argv.mode == 'train':
         import train
         train.main(argv)
     else:
-        import stats
-        stats.main(argv)
+        import test
+        test.main(argv)
