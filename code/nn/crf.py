@@ -28,7 +28,7 @@ def y_prob(layer, emit, d, batch):
         :param trans: 1D: n_y, 2D, n_y
         """
         d_score_t = d_score_prev + trans[d_t, d_prev] + e_t[T.arange(batch), d_t]  # 1D: Batch
-        z_sum = z_scores_prev.dimshuffle(0,'x',1) + trans  # 1D: Batch, 2D: n_y, 3D: n_y
+        z_sum = z_scores_prev.dimshuffle(0, 'x', 1) + trans  # 1D: Batch, 2D: n_y, 3D: n_y
         z_scores_t = logsumexp(z_sum, axis=2).reshape(e_t.shape) + e_t  # 1D: Batch, 2D: n_y
         return d_t, d_score_t, z_scores_t
 

@@ -33,6 +33,7 @@ if __name__ == '__main__':
     parser.add_argument('--dim_hidden', type=int, default=32, help='dimension of hidden layer')
 
     """ Training Parameters """
+    parser.add_argument('--n_cands', type=int, default=1, help='mini batch size')
     parser.add_argument('--batch_size', type=int, default=32, help='mini batch size')
     parser.add_argument('--opt', default='adam', help='optimization method')
     parser.add_argument('--epoch', type=int, default=50, help='number of epochs to train')

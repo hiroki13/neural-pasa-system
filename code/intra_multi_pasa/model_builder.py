@@ -1,13 +1,14 @@
 import theano
 import theano.tensor as T
 
-import rnn_pasa_model
+import pasa_model
 
 
 def set_model(argv, emb, vocab_word, vocab_label):
     x = T.imatrix('x')
     y = T.ivector('y')
     n_words = T.iscalar('n_words')
+    n_prds = T.iscalar('n_prds')
 
     """ Set the classifier parameters"""
     window = argv.window * 2 + 1
@@ -21,11 +22,12 @@ def set_model(argv, emb, vocab_word, vocab_label):
     L2_reg = argv.reg
     unit = argv.unit
     dropout = argv.dropout
+    attention = argv.attention
     n_layers = argv.layer
 
-    model = rnn_pasa_model.Model(x=x, y=y, n_words=n_words, window=window, opt=opt, lr=lr, init_emb=init_emb,
-                                 dim_emb=dim_emb, dim_hidden=dim_hidden, dim_out=dim_out, n_vocab=n_vocab,
-                                 L2_reg=L2_reg, unit=unit, dropout=dropout, n_layers=n_layers)
+    model = pasa_model.Model(x=x, y=y, n_words=n_words, n_prds=n_prds, window=window, opt=opt, lr=lr, init_emb=init_emb,
+                             dim_emb=dim_emb, dim_hidden=dim_hidden, dim_out=dim_out, n_vocab=n_vocab,
+                             L2_reg=L2_reg, unit=unit, dropout=dropout, attention=attention, n_layers=n_layers)
     return model
 
 
@@ -41,6 +43,7 @@ def set_train_f(model, tr_samples):
                                   model.tr_inputs[0]: tr_samples[0][bos: eos],
                                   model.tr_inputs[1]: tr_samples[1][bos: eos],
                                   model.tr_inputs[2]: tr_samples[2][index],
+                                  model.tr_inputs[3]: tr_samples[3][index],
                               }
                               )
     return train_f
@@ -57,6 +60,7 @@ def set_pred_f(model, samples):
                                  model.pr_inputs[0]: samples[0][bos: eos],
                                  model.pr_inputs[1]: samples[1][bos: eos],
                                  model.pr_inputs[2]: samples[2][index],
+                                 model.pr_inputs[3]: samples[3][index],
                              }
                              )
     return pred_f

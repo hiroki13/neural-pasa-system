@@ -114,6 +114,24 @@ def sample_statistics(samples, vocab_label):
     print
 
 
+def inter_sample_statistics(samples):
+    print '\nSAMPLE STATISTICS\n'
+
+    """
+    The case distribution does not match with that of corpus_statistics(),
+    because one word sometimes plays multiple case roles.
+    Even in such cases, we assign one case role for a word.
+    """
+
+    n_samples = len(samples)
+    n_negs = 0
+
+    for sample in samples:
+        n_negs += len(sample.negative)
+
+    print '\tSamples: Pos: %d  Neg: %d  Avg. Neg: %f\n' % (n_samples, n_negs, n_negs / float(n_samples))
+
+
 def check_samples(samples, vocab_word, vocab_label):
     # samples: (word_ids, tag_ids, prd_indices, contexts)
     # word_ids: 1D: n_sents, 2D: n_words

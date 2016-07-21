@@ -23,7 +23,7 @@ def get_corpus_ids(corpus, vocab):
     return ids
 
 
-def get_samples(corpus, vocab_word, test=False, window=5):
+def get_samples(corpus, vocab_word, test=False, n_cands=1, window=5):
     """
     :param corpus: 1D: n_docs, 2D: n_sents, 3D: n_words; elem=Word
     :return: samples: 1D: n_sents, 2D: n_prds, 3D: n_chars, 4D: [char_id, ctx_ids, prd_id, tag_id]
@@ -33,7 +33,7 @@ def get_samples(corpus, vocab_word, test=False, window=5):
     corpus_ids = get_corpus_ids(corpus, vocab_word)
     for i, doc in enumerate(corpus):
         for sent in doc:
-            sample = get_one_sample(sent, doc, corpus_ids[i], test, window)
+            sample = get_one_sample(sent, doc, corpus_ids[i], test, window, n_cands)
             if sample:
                 samples.extend(sample)
     return samples, corpus_ids
@@ -53,6 +53,7 @@ def get_one_sample(sent, doc, doc_ids, test=False, window=5, n_negs=1, case=0):
         if word.is_prd is False:  # check if the word is predicate or not
             continue
 
+        indices = [(i,  j) for i in xrange(word.sent_index) for j in xrange(len(doc[i]))]
         for case_label, arg_indices in enumerate(word.inter_case_arg_index):
             if case_label != case:
                 continue
@@ -64,8 +65,8 @@ def get_one_sample(sent, doc, doc_ids, test=False, window=5, n_negs=1, case=0):
                 if test:
                     sample.negative = get_all_phi(prd=word, doc=doc, doc_ids=doc_ids, window=window)
                 else:
-#                    sample.negative = get_all_phi(prd=word, doc=doc, doc_ids=doc_ids, window=window)
-                    sample.negative = get_neg_phi(prd=word, arg=arg, doc=doc, doc_ids=doc_ids, n_negs=n_negs, window=window)
+                    sample.negative = get_neg_phi(prd=word, arg=arg, doc=doc, doc_ids=doc_ids, indices=indices,
+                                                  n_negs=n_negs, window=window)
 
                 if sample.negative:
                     samples.append(sample)
@@ -85,18 +86,22 @@ def get_one_phi(prd, arg, doc_ids, window=5):
     return sent_a_ids[arg.index: arg.index + window] + sent_p_ids[prd.index: prd.index + window]
 
 
-def get_neg_phi(prd, arg, doc, doc_ids, n_negs=20, window=5):
+def get_neg_phi(prd, arg, doc, doc_ids, indices, n_negs=1, window=5):
     neg_feature = []
-    doc_indices = range(prd.sent_index)
+    random.shuffle(indices)
     for i in xrange(n_negs):
-        random.shuffle(doc_indices)
-        sent = doc[doc_indices[0]]
-        sent_indices = range(len(sent))
-        if len(sent_indices) < 2:
+        if i >= len(indices):
+            break
+
+        sent_index, word_index = indices[i]
+        sent = doc[sent_index]
+        arg_neg = sent[word_index]
+
+        if arg_neg.index == arg.index and arg_neg.sent_index == arg.sent_index:
             continue
-        random.shuffle(sent_indices)
-        arg_neg = sent[sent_indices[0]] if sent_indices[0] != arg.index else sent[sent_indices[1]]
+
         neg_feature.append(get_one_phi(prd, arg_neg, doc_ids, window))
+
     return neg_feature
 
 
@@ -108,7 +113,7 @@ def get_all_phi(prd, doc, doc_ids, window=5):
     return neg_feature
 
 
-def theano_format(samples, batch_size=32):
+def theano_format(samples, batch_size=32): # TODO
     """
     :param samples: 1D: n_samples; elem=Sample()
     :return:

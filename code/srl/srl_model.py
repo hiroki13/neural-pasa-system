@@ -9,10 +9,10 @@ import theano.tensor as T
 
 
 class Model(object):
-    def __init__(self, x, y, n_words, window, opt, lr, init_emb, dim_emb, dim_hidden, dim_out,
-                 n_vocab, L2_reg, unit, dropout, n_layers=2):
-        self.tr_inputs = [x, y, n_words]
-        self.pr_inputs = [x, y, n_words]
+    def __init__(self, x, y, n_words, n_prds, window, opt, lr, init_emb, dim_emb, dim_hidden, dim_out,
+                 n_vocab, L2_reg, unit, dropout, attention, n_layers=2):
+        self.tr_inputs = [x, y, n_words, n_prds]
+        self.pr_inputs = [x, y, n_words, n_prds]
 
         self.x = x  # original x: 1D: batch * n_words, 2D: window + 1; elem=word_id
         self.y = y  # original y: 1D: batch * n_cands; elem=label
@@ -28,7 +28,7 @@ class Model(object):
         if unit == 'lstm':
             self.layers = lstm.layers
         else:
-            self.layers = gru.layers
+            self.layers = gru.layers_mp
 
         self.pad = build_shared_zeros((1, dim_emb))
         if init_emb is None:
@@ -41,8 +41,8 @@ class Model(object):
         e = self.E[x]
         e_reshaped = e.reshape((batch_size, n_words, n_fin))
 
-        params, o_layer, emit = self.layers(x=e_reshaped, batch=batch_size, n_fin=n_fin, n_h=dim_hidden, n_y=dim_out,
-                                            dropout=dropout_prob, n_layers=n_layers)
+        params, o_layer, emit = self.layers(x=e_reshaped, batch=batch_size, n_prds=n_prds, n_fin=n_fin, n_h=dim_hidden,
+                                            n_y=dim_out, dropout=dropout_prob, n_layers=n_layers, attention=attention)
         self.params.extend(params)
 
         self.p_y = y_prob(o_layer, emit, self.y_reshaped.dimshuffle(1, 0), batch_size)

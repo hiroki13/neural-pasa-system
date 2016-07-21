@@ -5,7 +5,7 @@ import numpy as np
 from utils import io_utils
 from ling.vocab import Vocab
 from preprocessor import get_samples, theano_format
-from stats.stats import corpus_statistics, sample_statistics, check_samples
+from stats.stats import corpus_statistics, inter_sample_statistics, check_samples
 from model_builder import set_model, set_train_f, set_pred_f
 from eval import Eval
 
@@ -50,27 +50,30 @@ def train(argv):
     # y: 1D: n_samples; elem=label id
     # word_ids: 1D: n_sents, 2D: n_words
 
-    tr_pre_samples, tr_word_ids = get_samples(corpus=train_corpus, vocab_word=vocab_word, window=argv.window)
+    tr_pre_samples, tr_word_ids = get_samples(corpus=train_corpus, vocab_word=vocab_word, window=argv.window,
+                                              n_cands=argv.n_cands)
     tr_samples, tr_batch_index = theano_format(tr_pre_samples)
     print '\nTRAIN',
-#    sample_statistics(tr_pre_samples[1], vocab_label)
+    inter_sample_statistics(tr_pre_samples)
     n_train_batches = len(tr_batch_index)
     print '\tTrain Mini-Batches: %d\n' % n_train_batches
 
     if argv.dev_data:
-        dev_pre_samples, dev_word_ids = get_samples(corpus=dev_corpus, vocab_word=vocab_word, test=True, window=argv.window)
+        dev_pre_samples, dev_word_ids = get_samples(corpus=dev_corpus, vocab_word=vocab_word, test=True,
+                                                    window=argv.window)
         dev_samples, dev_batch_index = theano_format(dev_pre_samples)
         n_dev_batches = len(dev_batch_index)
         print '\nDEV',
-#        sample_statistics(dev_pre_samples[1], vocab_label)
+        inter_sample_statistics(dev_pre_samples)
         print '\tDev Mini-Batches: %d\n' % n_dev_batches
 
     if argv.test_data:
-        test_pre_samples, test_word_ids = get_samples(corpus=test_corpus, vocab_word=vocab_word, test=True, window=argv.window)
+        test_pre_samples, test_word_ids = get_samples(corpus=test_corpus, vocab_word=vocab_word, test=True,
+                                                      window=argv.window)
         test_samples, test_batch_index = theano_format(test_pre_samples)
         n_test_batches = len(test_batch_index)
         print '\nTEST',
-#        sample_statistics(test_pre_samples[1], vocab_label)
+        inter_sample_statistics(test_pre_samples)
         print '\tTest Mini-Batches: %d\n' % n_test_batches
 
     if argv.check:
