@@ -4,7 +4,7 @@ import gzip
 import cPickle
 from collections import defaultdict
 
-from ling.word import Word
+from ling.word import Word, Wordsrl
 
 
 def load_ntc(path, data_size=1000000, model='word', word_freqs=defaultdict(int)):
@@ -58,6 +58,28 @@ def load_ntc(path, data_size=1000000, model='word', word_freqs=defaultdict(int))
 
         if doc and flag:
             corpus.append(doc)
+
+    return corpus, word_freqs
+
+
+def load_conll(path, data_size=1000000, word_freqs=defaultdict(int)):
+    corpus = []
+
+    with open(path) as f:
+        sent = []
+
+        for line in f:
+            line = line.rstrip().split('\t')
+
+            if len(line) > 10:
+                w = Wordsrl(line)
+                word_freqs[w.form] += 1
+                sent.append(w)
+            else:
+                corpus.append(sent)
+                sent = []
+                if len(corpus) == data_size:
+                    break
 
     return corpus, word_freqs
 

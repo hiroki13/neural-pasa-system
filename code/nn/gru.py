@@ -7,7 +7,7 @@ from attention import AttentionLayer
 import cnn
 
 
-def layers(x, batch, n_fin, n_h, n_y, dropout, n_layers=1, attention=True):
+def layers(x, batch, n_fin, n_h, n_y, dropout, n_layers=1, attention=False):
     params = []
 
     for i in xrange(n_layers):
@@ -28,15 +28,12 @@ def layers(x, batch, n_fin, n_h, n_y, dropout, n_layers=1, attention=True):
         h, _ = theano.scan(fn=layer.forward, sequences=[xr, xz, xh], outputs_info=[h0])
         params.extend(layer.params)
 
-        if dropout is not None:
-            h = apply_dropout(h, dropout)
+        h = apply_dropout(h, dropout)
 
     if attention:
         layer = AttentionLayer(n_h=n_h)
         params.extend(layer.params)
         h = layer.seq_attention(h)
-
-    if dropout is not None:
         h = apply_dropout(h, dropout)
 
     layer = CRFLayer(n_i=n_h * 2, n_h=n_y)

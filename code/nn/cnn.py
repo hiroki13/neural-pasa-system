@@ -38,6 +38,6 @@ class Layer(object):
         """
         h_multi = h.reshape((h.shape[0], h.shape[1] / n_prds, n_prds, h.shape[2]))
         # 1D: n_words, 2D: batch_size, 3D: n_h
-        h_multi = T.repeat(T.max(tanh(T.dot(h_multi, self.W)), axis=2), n_prds, 1)
-        return tanh(T.dot(T.concatenate([h, h_multi], axis=2), self.W_m))
+        h_multi = T.repeat(T.max(relu(T.dot(h_multi, self.W)), axis=2), n_prds, 1)
+        return relu(T.dot(T.concatenate([h, h_multi], axis=2), self.W_m))
 

@@ -33,8 +33,8 @@ if __name__ == '__main__':
     parser.add_argument('--window', type=int, default=5, help='window size for convolution')
     parser.add_argument('--dim_emb',    type=int, default=32, help='dimension of embeddings')
     parser.add_argument('--dim_hidden', type=int, default=32, help='dimension of hidden layer')
-    parser.add_argument('--dropout', type=float, default=None, help='dropout prob')
-    parser.add_argument('--attention', type=int, default=1, help='attention')
+    parser.add_argument('--dropout', type=float, default=0.0, help='dropout prob')
+    parser.add_argument('--attention', type=int, default=0, help='attention')
 
     """ Training Parameters """
     parser.add_argument('--batch_size', type=int, default=32, help='mini batch size')

@@ -10,19 +10,15 @@ import theano.tensor as T
 
 class Model(object):
     def __init__(self, x, y, n_words, window, opt, lr, init_emb, dim_emb, dim_hidden, dim_out,
-                 n_vocab, L2_reg, unit, dropout, n_layers=2):
-        self.tr_inputs = [x, y, n_words]
-        self.pr_inputs = [x, y, n_words]
+                 n_vocab, L2_reg, unit, dropout, attention, n_layers=2):
+        self.tr_inputs = [x, y, n_words, dropout]
+        self.pr_inputs = [x, y, n_words, dropout]
 
         self.x = x  # original x: 1D: batch * n_words, 2D: window + 1; elem=word_id
         self.y = y  # original y: 1D: batch * n_cands; elem=label
 
         batch_size = x.shape[0] / n_words
         n_fin = dim_emb * window
-        if dropout is not None:
-            dropout_prob = theano.shared(np.float32(dropout).astype(theano.config.floatX))
-        else:
-            dropout_prob = None
         self.y_reshaped = y.reshape((batch_size, n_words))
 
         if unit == 'lstm':
@@ -42,7 +38,7 @@ class Model(object):
         e_reshaped = e.reshape((batch_size, n_words, n_fin))
 
         params, o_layer, emit = self.layers(x=e_reshaped, batch=batch_size, n_fin=n_fin, n_h=dim_hidden, n_y=dim_out,
-                                            dropout=dropout_prob, n_layers=n_layers)
+                                            dropout=dropout, attention=attention, n_layers=n_layers)
         self.params.extend(params)
 
         self.p_y = y_prob(o_layer, emit, self.y_reshaped.dimshuffle(1, 0), batch_size)

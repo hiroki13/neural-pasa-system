@@ -84,7 +84,7 @@ def train(argv):
     """ Set a model """
     print '\n\nBuilding a model...'
     model = set_model(argv=argv, emb=emb, vocab_word=vocab_word, vocab_label=vocab_label)
-    train_f = set_train_f(model, tr_samples)
+    train_f = set_train_f(model, tr_samples, argv.dropout)
     if argv.dev_data:
         dev_f = set_pred_f(model, dev_samples)
     if argv.test_data:
