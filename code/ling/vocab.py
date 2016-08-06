@@ -45,6 +45,18 @@ class Vocab(object):
         self.add_word(NI)
         self.add_word(PRD)
 
+    def set_pas_labels_char(self):
+        bio = ['B-', 'I-']
+        self.add_word(NA)
+        for i in bio:
+            self.add_word(i + GA)
+        for i in bio:
+            self.add_word(i + O)
+        for i in bio:
+            self.add_word(i + NI)
+        for i in bio:
+            self.add_word(i + PRD)
+
     def add_vocab(self, word_freqs, vocab_cut_off=0):
         for w, freq in sorted(word_freqs.items(), key=lambda (k, v): -v):
             if freq == vocab_cut_off:

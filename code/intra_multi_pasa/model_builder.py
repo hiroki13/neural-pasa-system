@@ -11,7 +11,7 @@ def set_model(argv, emb, vocab_word, vocab_label):
     n_prds = T.iscalar('n_prds')
 
     """ Set the classifier parameters"""
-    window = argv.window * 2 + 1
+    window = 5 + argv.window + 1
     opt = argv.opt
     lr = argv.lr
     init_emb = emb
@@ -23,11 +23,12 @@ def set_model(argv, emb, vocab_word, vocab_label):
     unit = argv.unit
     dropout = argv.dropout
     attention = argv.attention
+    mp_cnn = argv.mp_cnn
     n_layers = argv.layer
 
     model = pasa_model.Model(x=x, y=y, n_words=n_words, n_prds=n_prds, window=window, opt=opt, lr=lr, init_emb=init_emb,
-                             dim_emb=dim_emb, dim_hidden=dim_hidden, dim_out=dim_out, n_vocab=n_vocab,
-                             L2_reg=L2_reg, unit=unit, dropout=dropout, attention=attention, n_layers=n_layers)
+                             dim_emb=dim_emb, dim_hidden=dim_hidden, dim_out=dim_out, n_vocab=n_vocab, L2_reg=L2_reg,
+                             unit=unit, dropout=dropout, attention=attention, mp_cnn=mp_cnn, n_layers=n_layers)
     return model
 
 

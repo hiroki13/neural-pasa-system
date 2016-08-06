@@ -1,10 +1,16 @@
 # -*- coding: utf-8 -*-
 
+import sys
 import gzip
 import cPickle
 from collections import defaultdict
 
 from ling.word import Word, Wordsrl
+
+
+def say(s, stream=sys.stdout):
+    stream.write(s)
+    stream.flush()
 
 
 def load_ntc(path, data_size=1000000, model='word', word_freqs=defaultdict(int)):

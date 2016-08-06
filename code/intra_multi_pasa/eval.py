@@ -1,4 +1,5 @@
 import numpy as np
+from utils.io_utils import say
 
 GA_ID = 1
 O_ID = 2
@@ -78,16 +79,22 @@ class Eval(object):
 
     def show_results(self):
         self.set_metrics()
-        print '\n\tEVALUATION'
-
-        print '\t\tNLL: %f' % self.nll
+        say('\n\tNLL: %f' % self.nll)
 
         for c in xrange(3):
-            print '\n\tCASE: %d' % c
-            print '\t\tCRR: %d  TTL P: %d  TTL R: %d' % (self.corrects[c], self.results_sys[c], self.results_gold[c])
-            print '\t\tF: %f  P: %f  R: %f' % (self.f1[c], self.precision[c], self.recall[c])
+            crr = int(self.corrects[c])
+            r_sys = int(self.results_sys[c])
+            r_gold = int(self.results_gold[c])
 
-        print '\n\tTOTAL'
-        print '\t\tCRR: %d  TTL P: %d  TTL R: %d' % (self.all_corrects, self.all_results_sys, self.all_results_gold)
-        print '\t\tF: %f  P: %f  R: %f' % (self.all_f1, self.all_precision, self.all_recall)
+            say('\n\tCASE-{:d}:\tF:{:.2%}  P:{:.2%} ({:d}/{:d})  R:{:.2%} ({:d}/{:d})'.format(
+                c, self.f1[c], self.precision[c], crr, r_sys, self.recall[c], crr, r_gold)
+                )
+
+        crr = int(self.all_corrects)
+        r_sys = int(self.all_results_sys)
+        r_gold = int(self.all_results_gold)
+
+        say('\n\tTOTAL:\tF:{:.2%}  P:{:.2%} ({:d}/{:d})  R:{:.2%} ({:d}/{:d})'.format(
+            self.all_f1, self.all_precision, crr, r_sys, self.all_recall, crr, r_gold)
+            )
 

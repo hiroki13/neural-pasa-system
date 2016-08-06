@@ -59,15 +59,20 @@ def get_phi(sent_w_ids, prd_indices, window=5):
     slide = window / 2
     sent_len = len(sent_w_ids)
     pad = [0 for i in xrange(slide)]
-    sent_w_ids = pad + sent_w_ids + pad
+    a_sent_w_ids = pad + sent_w_ids + pad
+
+    p_window = 5
+    p_slide = p_window / 2
+    p_pad = [0 for i in xrange(p_slide)]
+    p_sent_w_ids = p_pad + sent_w_ids + p_pad
 
     for prd_index in prd_indices:
-        prd_ctx = sent_w_ids[prd_index: prd_index + window]
+        prd_ctx = p_sent_w_ids[prd_index: prd_index + p_window]
         p_phi = []
 
         for arg_index in xrange(sent_len):
-            arg_ctx = sent_w_ids[arg_index: arg_index + window] + prd_ctx
-            arg_ctx.append(get_mark(prd_index, arg_index, window))
+            arg_ctx = a_sent_w_ids[arg_index: arg_index + window] + prd_ctx
+            arg_ctx.append(get_mark(prd_index, arg_index))
             p_phi.append(arg_ctx)
         phi.append(p_phi)
 
@@ -109,7 +114,7 @@ def get_labels(sent, vocab_label):
     return labels, prd_indices
 
 
-def get_mark(prd_index, arg_index, window):
+def get_mark(prd_index, arg_index, window=5):
     slide = window / 2
     if prd_index - slide <= arg_index <= prd_index + slide:
         return 1

@@ -10,7 +10,7 @@ import theano.tensor as T
 
 class Model(object):
     def __init__(self, x, y, n_words, n_prds, window, opt, lr, init_emb, dim_emb, dim_hidden, dim_out,
-                 n_vocab, L2_reg, unit, dropout, attention, n_layers=2):
+                 n_vocab, L2_reg, unit, dropout, attention, mp_cnn, n_layers=2):
         self.tr_inputs = [x, y, n_words, n_prds]
         self.pr_inputs = [x, y, n_words, n_prds]
 
@@ -42,7 +42,8 @@ class Model(object):
         e_reshaped = e.reshape((batch_size, n_words, n_fin))
 
         params, o_layer, emit = self.layers(x=e_reshaped, batch=batch_size, n_prds=n_prds, n_fin=n_fin, n_h=dim_hidden,
-                                            n_y=dim_out, dropout=dropout_prob, n_layers=n_layers, attention=attention)
+                                            n_y=dim_out, dropout=dropout_prob, n_layers=n_layers, attention=attention,
+                                            mp_cnn=mp_cnn)
         self.params.extend(params)
 
         self.p_y = y_prob(o_layer, emit, self.y_reshaped.dimshuffle(1, 0), batch_size)

@@ -48,9 +48,12 @@ def layers(x, batch, n_fin, n_h, n_y, dropout, n_layers=1, attention=False):
     return params, layer, emit
 
 
-def layers_mp(x, batch, n_prds, n_fin, n_h, n_y, dropout, attention, n_layers=1):
+def layers_mp(x, batch, n_prds, n_fin, n_h, n_y, dropout, attention, mp_cnn=0, n_layers=1):
     params = []
 
+    ##########################################
+    # Bidirectional recurrent stacked layers #
+    ##########################################
     for i in xrange(n_layers):
         if i == 0:
             layer = FirstLayer(n_i=n_fin, n_h=n_h)
@@ -72,18 +75,35 @@ def layers_mp(x, batch, n_prds, n_fin, n_h, n_y, dropout, attention, n_layers=1)
         if dropout is not None:
             h = apply_dropout(h, dropout)
 
+        ############################
+        # Multiple seq convolution #
+        ############################
+        if mp_cnn:
+            layer = cnn.Layer(n_h=n_h, pooling=T.max, w_skip=1)
+            h = layer.convolution(h=h, n_prds=n_prds)
+            params.extend(layer.params)
+
+    ##########################################
+    # Taking into account multiple sequences #
+    ##########################################
     if attention:
         layer = AttentionLayer(n_h=n_h)
+        layer_action = layer.multi_prd_attention
+    elif mp_cnn:
+        layer = cnn.Layer(n_h=n_h, pooling=T.max)
+        layer_action = layer.convolution
+
+    if attention or mp_cnn:
         params.extend(layer.params)
-        h = layer.multi_seq_attention(h=h, n_prds=n_prds)
-    else:
-        layer = cnn.Layer(n_h=n_h)
-        params.extend(layer.params)
-        h = layer.convolution(h=h, n_prds=n_prds)
+        layer_input = relu(T.dot(T.concatenate([layer_input, h], 2), layer.W))
+        h = layer_action(h=layer_input, n_prds=n_prds)
 
     if dropout is not None:
         h = apply_dropout(h, dropout)
 
+    #############
+    # CRF layer #
+    #############
     layer = CRFLayer(n_i=n_h * 2, n_h=n_y)
     params.extend(layer.params)
     h = relu(T.dot(T.concatenate([layer_input, h], 2), layer.W))

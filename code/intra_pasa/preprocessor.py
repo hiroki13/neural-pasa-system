@@ -59,15 +59,20 @@ def get_phi(sent_w_ids, prd_indices, window=5):
     slide = window / 2
     sent_len = len(sent_w_ids)
     pad = [0 for i in xrange(slide)]
-    sent_w_ids = pad + sent_w_ids + pad
+    a_sent_w_ids = pad + sent_w_ids + pad
+
+    p_window = 5
+    p_slide = p_window / 2
+    p_pad = [0 for i in xrange(p_slide)]
+    p_sent_w_ids = p_pad + sent_w_ids + p_pad
 
     for prd_index in prd_indices:
-        prd_ctx = sent_w_ids[prd_index: prd_index + window]
+        prd_ctx = p_sent_w_ids[prd_index: prd_index + p_window]
         p_phi = []
 
         for arg_index in xrange(sent_len):
-            arg_ctx = sent_w_ids[arg_index: arg_index + window] + prd_ctx
-            arg_ctx.append(get_mark(prd_index, arg_index, window))
+            arg_ctx = a_sent_w_ids[arg_index: arg_index + window] + prd_ctx
+            arg_ctx.append(get_mark(prd_index, arg_index))
             p_phi.append(arg_ctx)
         phi.append(p_phi)
 
@@ -109,7 +114,7 @@ def get_labels(sent, vocab_label):
     return labels, prd_indices
 
 
-def get_mark(prd_index, arg_index, window):
+def get_mark(prd_index, arg_index, window=5):
     slide = window / 2
     if prd_index - slide <= arg_index <= prd_index + slide:
         return 1
@@ -133,17 +138,23 @@ def theano_format(samples, batch_size=32):
     index = 0
 
     for i in xrange(len(sample_x)):
-        prd_x = sample_x[i]  # 1D: n_prds, 2D: n_words, 3D: window; word_id
+        # 1D: n_prds, 2D: n_words, 3D: window; word_id
+        prd_x = sample_x[i]
         prd_y = sample_y[i]
-
-        """ Check the boundary of batches """
         n_words = len(prd_x[0])
+
+        #################################
+        # Check the boundary of batches #
+        #################################
         if prev_n_words != n_words or index - prev_index > batch_size:
             batch_index.append((prev_index, index))
             sent_length.append(prev_n_words)
             prev_index = index
             prev_n_words = n_words
 
+        ######################################
+        # Add each sequence into the dataset #
+        ######################################
         for j in xrange(len(prd_x)):
             sent_x = prd_x[j]
             sent_y = prd_y[j]
@@ -161,4 +172,42 @@ def theano_format(samples, batch_size=32):
 
     assert len(batch_index) == len(sent_length)
     return [shared(theano_x), shared(theano_y), shared(sent_length)], batch_index
+
+
+def theano_format_online(samples):
+    """
+    :param samples: (sample_x, sample_y)
+    :return: theano_x: 1D: n_sents, 2D: n_prds * n_words, 3D: window; word_id
+    :return: theano_y: 1D: n_sents, 2D: n_prds * n_words
+    :return: sent_length: 1D: n_sents; int
+    """
+
+    def numpize(_sample):
+        return np.asarray(_sample, dtype='int32')
+
+    theano_x = []
+    theano_y = []
+    sent_length = []
+
+    # x: 1D: n_sents, 2D: n_prds, 3D: n_words, 4D: window; word_id
+    # y: 1D: n_sents, 2D: n_prds, 3D: n_words; label
+    sample_x = samples[0]
+    sample_y = samples[1]
+
+    for i in xrange(len(sample_x)):
+        sent_x = []
+        sent_y = []
+
+        prd_x = sample_x[i]
+        prd_y = sample_y[i]
+        sent_length.append(len(prd_x[0]))
+
+        for j in xrange(len(prd_x)):
+            sent_x += prd_x[j]
+            sent_y += prd_y[j]
+
+        theano_x.append(numpize(sent_x))
+        theano_y.append(numpize(sent_y))
+
+    return theano_x, theano_y, numpize(sent_length)
 

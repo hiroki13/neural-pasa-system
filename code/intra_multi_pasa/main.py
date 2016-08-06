@@ -34,7 +34,8 @@ if __name__ == '__main__':
     parser.add_argument('--dim_emb',    type=int, default=32, help='dimension of embeddings')
     parser.add_argument('--dim_hidden', type=int, default=32, help='dimension of hidden layer')
     parser.add_argument('--dropout', type=float, default=None, help='dropout prob')
-    parser.add_argument('--attention', type=int, default=1, help='attention')
+    parser.add_argument('--attention', type=int, default=0, help='attention')
+    parser.add_argument('--mp_cnn', type=int, default=0, help='mp_cnn')
 
     """ Training Parameters """
     parser.add_argument('--batch_size', type=int, default=32, help='mini batch size')
