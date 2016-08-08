@@ -26,6 +26,8 @@ if __name__ == '__main__':
     parser.add_argument('--test_data', help='path to test data')
     parser.add_argument('--data_size', type=int, default=100000)
     parser.add_argument('--vocab_cut_off', type=int, default=0)
+    parser.add_argument('--vocab', type=str, default=None, help='vocab')
+    parser.add_argument('--label', type=str, default=None, help='label')
 
     """ Neural Architectures """
     parser.add_argument('--unit', default='gru', help='unit')
@@ -45,6 +47,9 @@ if __name__ == '__main__':
     parser.add_argument('--init_emb', default=None, help='Initial embedding to be loaded')
 
     argv = parser.parse_args()
+    print
+    print argv
+    print
 
     """ Mode  """
     if argv.mode == 'train':

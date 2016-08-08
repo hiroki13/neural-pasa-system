@@ -96,7 +96,8 @@ def sample_statistics(samples, vocab_label):
         label_count[key] = 0
     n_labels = vocab_label.size()
 
-    for sent in samples:
+    for sample in samples:
+        sent = sample.label_ids
         for prd_labels in sent:
             flag = False
             for label in prd_labels:

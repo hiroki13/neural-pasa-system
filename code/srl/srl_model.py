@@ -24,7 +24,7 @@ class Model(object):
         if unit == 'lstm':
             self.layers = lstm.layers
         else:
-            self.layers = gru.layers
+            self.layers = gru.set_layers
 
         self.pad = build_shared_zeros((1, dim_emb))
         if init_emb is None:

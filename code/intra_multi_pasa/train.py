@@ -4,6 +4,7 @@ import math
 import numpy as np
 
 from utils import io_utils
+from utils.io_utils import dump_data
 from ling.vocab import Vocab
 from preprocessor import get_samples, theano_format
 from stats.stats import corpus_statistics, sample_statistics, check_samples
@@ -19,6 +20,8 @@ def train(argv):
     """ Set labels """
     vocab_label = Vocab()
     vocab_label.set_pas_labels()
+    if argv.save_model:
+        dump_data(vocab_label, 'vocab_label')
     print '\nTARGET LABELS: %d\t%s\n' % (vocab_label.size(), str(vocab_label.w2i))
 
     """ Load files """
@@ -43,6 +46,8 @@ def train(argv):
     vocab_word = Vocab()
     vocab_word.set_init_word()
     vocab_word.add_vocab(word_freqs=word_freqs, vocab_cut_off=argv.vocab_cut_off)
+    if argv.save_model:
+        dump_data(vocab_word, 'vocab_word.cut-%d' % argv.vocab_cut_off)
     print '\nVocab: %d\tType: word\n' % vocab_word.size()
 
     """ Preprocessing """
@@ -137,6 +142,8 @@ def train(argv):
             if best_dev_f1 < dev_f1:
                 best_dev_f1 = dev_f1
                 update = True
+                if argv.save_model:
+                    dump_data(model, 'model.layer-%d.window-%d.reg-%f' % (argv.layer, argv.window, argv.reg))
 
         if argv.test_data:
             print '\n  TEST\n\t',

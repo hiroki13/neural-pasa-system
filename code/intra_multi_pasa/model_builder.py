@@ -50,6 +50,12 @@ def set_train_f(model, tr_samples):
     return train_f
 
 
+def set_predict_f(model):
+    return theano.function(inputs=model.inputs,
+                           outputs=[model.y_pred, model.y_reshaped],
+                           )
+
+
 def set_pred_f(model, samples):
     index = T.iscalar('index')
     bos = T.iscalar('bos')

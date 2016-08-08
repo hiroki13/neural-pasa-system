@@ -1,147 +1,55 @@
 import numpy as np
 import theano
 
-from ling.vocab import UNK, NA, GA, O, NI, PRD, GA_LABEL, O_LABEL
+from ling.sample import Sample
 
 
-def get_ids(sent, vocab):
-    ids = []
-    for w in sent:
-        if w.form not in vocab.w2i:
-            w_id = vocab.get_id(UNK)
-        else:
-            w_id = vocab.get_id(w.form)
-        ids.append(w_id)
-    return ids
-
-
-def get_samples(corpus, vocab_word, vocab_label, window=5):
+def get_samples(corpus, vocab_word, vocab_label, window=5, test=False):
     """
     :param corpus: 1D: n_docs, 2D: n_sents, 3D: n_words; elem=Word
-    :return: samples: 1D: n_sents, 2D: n_prds, 3D: n_chars, 4D: [char_id, ctx_ids, prd_id, tag_id]
+    :return: samples: 1D: n_sents; Sample
     """
 
-    word_ids = []
-    y = []
-    prd_indices = []
-    x = []
+    corpus = [sent for doc in corpus for sent in doc]
 
-    sorted_corpus = [sent for doc in corpus for sent in doc]
-    sorted_corpus.sort(key=lambda s: len(s))
+    if test is False:
+        corpus.sort(key=lambda s: len(s))
 
-    for sent in sorted_corpus:
-        """ Get word ids """
-        tmp_word_ids = get_ids(sent, vocab_word)
+    samples = []
+    for sent in corpus:
+        sample = Sample(sent=sent, window=window)
+        sample.set_params(vocab_word, vocab_label)
+        samples.append(sample)
 
-        """ Get labels """
-        tmp_labels, tmp_prd_indices = get_labels(sent, vocab_label)
-
-        if len(tmp_prd_indices) == 0:
-            continue
-
-        word_ids.append(tmp_word_ids)
-        y.append(tmp_labels)
-        prd_indices.append(tmp_prd_indices)
-        x.append(get_phi(tmp_word_ids, tmp_prd_indices, window))
-
-    assert len(word_ids) == len(y) == len(prd_indices) == len(x)
-    return (x, y), word_ids
+    return samples
 
 
-def get_phi(sent_w_ids, prd_indices, window=5):
+def get_shared_samples(samples, batch_size=32):
     """
-    :param sent_w_ids: 1D: n_words; elem=word id
-    :param prd_indices: 1D: n_prds; prd index
-    :return: context: 1D: n_words, 2D: window+1; elem=word id
+    :param samples: 1D: n_sents; Sample
     """
 
-    phi = []
-    slide = window / 2
-    sent_len = len(sent_w_ids)
-    pad = [0 for i in xrange(slide)]
-    a_sent_w_ids = pad + sent_w_ids + pad
-
-    p_window = 5
-    p_slide = p_window / 2
-    p_pad = [0 for i in xrange(p_slide)]
-    p_sent_w_ids = p_pad + sent_w_ids + p_pad
-
-    for prd_index in prd_indices:
-        prd_ctx = p_sent_w_ids[prd_index: prd_index + p_window]
-        p_phi = []
-
-        for arg_index in xrange(sent_len):
-            arg_ctx = a_sent_w_ids[arg_index: arg_index + window] + prd_ctx
-            arg_ctx.append(get_mark(prd_index, arg_index))
-            p_phi.append(arg_ctx)
-        phi.append(p_phi)
-
-    assert len(phi) == len(prd_indices)
-    return phi
-
-
-def get_labels(sent, vocab_label):
-    """
-    :param sent: 1D: n_words, 2D: (word, pas_info, pas_id)
-    :return: labels: 1D: n_prds, 2D: n_chars; elem=label id
-    :return: prd_indices: 1D: n_prds, 2D: n_chars of prd; elem=char index
-    """
-
-    labels = []
-    prd_indices = []
-
-    for word in sent:
-        if word.is_prd:  # check if the word is a predicate or not
-            p_labels = [vocab_label.get_id(NA) for i in xrange(len(sent))]
-            p_labels[word.index] = vocab_label.get_id(PRD)
-
-            is_arg = False
-            for case_label, arg_index in enumerate(word.case_arg_index):
-                if arg_index > -1:
-                    if case_label == GA_LABEL:
-                        p_labels[arg_index] = vocab_label.get_id(GA)
-                    elif case_label == O_LABEL:
-                        p_labels[arg_index] = vocab_label.get_id(O)
-                    else:
-                        p_labels[arg_index] = vocab_label.get_id(NI)
-                    is_arg = True
-
-            if is_arg:
-                labels.append(p_labels)
-                prd_indices.append(word.index)
-
-    assert len(labels) == len(prd_indices)
-    return labels, prd_indices
-
-
-def get_mark(prd_index, arg_index, window=5):
-    slide = window / 2
-    if prd_index - slide <= arg_index <= prd_index + slide:
-        return 1
-    return 2
-
-
-def theano_format(samples, batch_size=32):
     def shared(_sample):
         return theano.shared(np.asarray(_sample, dtype='int32'), borrow=True)
 
+    #######################################
+    # Remove the samples that has no prds #
+    #######################################
+    samples = [sample for sample in samples if sample.n_prds > 0]
+
+    ##########################################
+    # Transform samples into shared_variable #
+    ##########################################
     theano_x = []
     theano_y = []
     batch_index = []
     sent_length = []
-
-    sample_x = samples[0]
-    sample_y = samples[1]
-
-    prev_n_words = len(sample_x[0][0])
+    prev_n_words = samples[0].n_words
     prev_index = 0
     index = 0
 
-    for i in xrange(len(sample_x)):
-        # 1D: n_prds, 2D: n_words, 3D: window; word_id
-        prd_x = sample_x[i]
-        prd_y = sample_y[i]
-        n_words = len(prd_x[0])
+    for sample in samples:
+        n_words = sample.n_words
 
         #################################
         # Check the boundary of batches #
@@ -155,16 +63,9 @@ def theano_format(samples, batch_size=32):
         ######################################
         # Add each sequence into the dataset #
         ######################################
-        for j in xrange(len(prd_x)):
-            sent_x = prd_x[j]
-            sent_y = prd_y[j]
-
-            for k in xrange(len(sent_x)):
-                x = sent_x[k]
-                y = sent_y[k]
-                theano_x.append(x)
-                theano_y.append(y)
-                index += 1
+        theano_x.extend(sample.x)
+        theano_y.extend(sample.y)
+        index += len(sample.x)
 
     if index > prev_index:
         batch_index.append((prev_index, index))
@@ -172,42 +73,3 @@ def theano_format(samples, batch_size=32):
 
     assert len(batch_index) == len(sent_length)
     return [shared(theano_x), shared(theano_y), shared(sent_length)], batch_index
-
-
-def theano_format_online(samples):
-    """
-    :param samples: (sample_x, sample_y)
-    :return: theano_x: 1D: n_sents, 2D: n_prds * n_words, 3D: window; word_id
-    :return: theano_y: 1D: n_sents, 2D: n_prds * n_words
-    :return: sent_length: 1D: n_sents; int
-    """
-
-    def numpize(_sample):
-        return np.asarray(_sample, dtype='int32')
-
-    theano_x = []
-    theano_y = []
-    sent_length = []
-
-    # x: 1D: n_sents, 2D: n_prds, 3D: n_words, 4D: window; word_id
-    # y: 1D: n_sents, 2D: n_prds, 3D: n_words; label
-    sample_x = samples[0]
-    sample_y = samples[1]
-
-    for i in xrange(len(sample_x)):
-        sent_x = []
-        sent_y = []
-
-        prd_x = sample_x[i]
-        prd_y = sample_y[i]
-        sent_length.append(len(prd_x[0]))
-
-        for j in xrange(len(prd_x)):
-            sent_x += prd_x[j]
-            sent_y += prd_y[j]
-
-        theano_x.append(numpize(sent_x))
-        theano_y.append(numpize(sent_y))
-
-    return theano_x, theano_y, numpize(sent_length)
-

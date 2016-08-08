@@ -174,3 +174,41 @@ def theano_format(samples, batch_size=32):
     assert len(batch_index) == len(sent_length) == len(num_prds)
     return [shared(theano_x), shared(theano_y), shared(sent_length), shared(num_prds)], batch_index
 
+
+def theano_format_online(samples):
+    """
+    :param samples: (sample_x, sample_y)
+    :return: theano_x: 1D: n_sents, 2D: n_prds * n_words, 3D: window; word_id
+    :return: theano_y: 1D: n_sents, 2D: n_prds * n_words
+    :return: sent_length: 1D: n_sents; int
+    """
+
+    def numpize(_sample):
+        return np.asarray(_sample, dtype='int32')
+
+    theano_x = []
+    theano_y = []
+    sent_length = []
+
+    # x: 1D: n_sents, 2D: n_prds, 3D: n_words, 4D: window; word_id
+    # y: 1D: n_sents, 2D: n_prds, 3D: n_words; label
+    sample_x = samples[0]
+    sample_y = samples[1]
+
+    for i in xrange(len(sample_x)):
+        sent_x = []
+        sent_y = []
+
+        prd_x = sample_x[i]
+        prd_y = sample_y[i]
+        sent_length.append(len(prd_x[0]))
+
+        for j in xrange(len(prd_x)):
+            sent_x += prd_x[j]
+            sent_y += prd_y[j]
+
+        theano_x.append(numpize(sent_x))
+        theano_y.append(numpize(sent_y))
+
+    return theano_x, theano_y, numpize(sent_length)
+

@@ -1,30 +1,26 @@
+import sys
+import time
+
 from utils import io_utils
-from utils.io_utils import say, load_data
+from utils.io_utils import say
 from preprocessor import get_samples, theano_format_online
 from stats.stats import corpus_statistics, sample_statistics
-from decoder import Decoder
+from eval import Eval
+from utils.io_utils import load_data
 
 
 def main(argv):
-    emb = None
-
     say('\nLoading...\n\n')
+    model = load_data(argv.load_model)
 
-    ####################
-    # Load vocab files #
-    ####################
+    if model.predict_all is None:
+        model.set_predict_f()
+
     vocab_label = load_data(argv.label)
-    say('\nTARGET LABELS: %d\t%s\n' % (vocab_label.size(), str(vocab_label.w2i)))
+    print '\nTARGET LABELS: %d\t%s\n' % (vocab_label.size(), str(vocab_label.w2i))
 
     vocab_word = load_data(argv.vocab)
-    say('\nVocab: %d\tType: word\n' % vocab_word.size())
-
-    ##################
-    # Load a decoder #
-    ##################
-    decoder = Decoder(argv, emb, vocab_word, vocab_label)
-    decoder.load_model(argv)
-    dec_argv = decoder.argv
+    print '\nVocab: %d\tType: word\n' % vocab_word.size()
 
     ##############
     # Load files #
@@ -40,11 +36,8 @@ def main(argv):
         print '\nTEST',
         corpus_statistics(test_corpus)
 
-    #################
-    # Preprocessing #
-    #################
     if argv.dev_data:
-        dev_pre_samples, dev_word_ids = get_samples(dev_corpus, vocab_word, vocab_label, dec_argv.window)
+        dev_pre_samples, dev_word_ids = get_samples(dev_corpus, vocab_word, vocab_label, argv.window)
         dev_samples = theano_format_online(dev_pre_samples)
         n_dev_batches = len(dev_samples[-1])
         print '\nDEV',
@@ -52,29 +45,44 @@ def main(argv):
         print '\tDev Mini-Batches: %d\n' % n_dev_batches
 
     if argv.test_data:
-        test_pre_samples, test_word_ids = get_samples(test_corpus, vocab_word, vocab_label, dec_argv.window)
+        test_pre_samples, test_word_ids = get_samples(test_corpus, vocab_word, vocab_label, argv.window)
         test_samples = theano_format_online(test_pre_samples)
         n_test_batches = len(test_samples[-1])
         print '\nTEST',
         sample_statistics(test_pre_samples[1], vocab_label)
         print '\tTest Mini-Batches: %d\n' % n_test_batches
 
-    ###############
-    # Set a model #
-    ###############
-    say('\n\nBuilding a model...')
-    decoder.set_predict_f()
+    print '\n\nBuilding a model...'
 
-    ###########
-    # Predict #
-    ###########
     if argv.dev_data:
         print '\n  DEV\n\t',
-        dev_f1 = decoder.predict_all(dev_samples)
+        dev_f1 = predict(model, dev_samples)
         say('\n\n\tDEV F:{:.2%}\n'.format(dev_f1))
 
     if argv.test_data:
         print '\n  TEST\n\t',
-        test_f1 = decoder.predict_all(test_samples)
+        test_f1 = predict(model, test_samples)
         say('\n\n\tBEST TEST F:{:.2%}\n'.format(test_f1))
 
+
+def predict(model, samples):
+    pred_eval = Eval()
+    start = time.time()
+    model.dropout.set_value(0.0)
+
+    for index in xrange(len(samples[0])):
+        if index != 0 and index % 1000 == 0:
+            print index,
+            sys.stdout.flush()
+
+        x = samples[0][index]
+        y = samples[1][index]
+        sent_len = samples[2][index]
+
+        results_sys, results_gold = model.predict_all(x, y, sent_len)
+        pred_eval.update_results(results_sys, results_gold)
+
+    print '\tTime: %f' % (time.time() - start)
+    pred_eval.show_results()
+
+    return pred_eval.all_f1

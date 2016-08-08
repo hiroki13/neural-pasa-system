@@ -6,11 +6,11 @@ import theano
 import numpy as np
 
 from utils import io_utils
-from utils.io_utils import say
+from utils.io_utils import say, dump_data
 from ling.vocab import Vocab
-from preprocessor import get_samples, theano_format, theano_format_online
+from preprocessor import get_samples, get_shared_samples
 from stats.stats import corpus_statistics, sample_statistics, check_samples
-from model import Model
+from decoder import Decoder
 from eval import Eval
 
 
@@ -24,6 +24,8 @@ def train(argv):
     ##############
     vocab_label = Vocab()
     vocab_label.set_pas_labels()
+    if argv.save:
+        dump_data(vocab_label, 'vocab_label')
     print '\nTARGET LABELS: %d\t%s\n' % (vocab_label.size(), str(vocab_label.w2i))
 
     ##############
@@ -52,56 +54,48 @@ def train(argv):
     vocab_word = Vocab()
     vocab_word.set_init_word()
     vocab_word.add_vocab(word_freqs=word_freqs, vocab_cut_off=argv.vocab_cut_off)
+    if argv.save:
+        dump_data(vocab_word, 'vocab_word.cut-%d' % argv.vocab_cut_off)
     print '\nVocab: %d\tType: word\n' % vocab_word.size()
 
     #################
     # Preprocessing #
     #################
-    # pre_samples: (x, y)
-    # x: 1D: n_sents, 2D: n_prds, 3D: n_words, 4D: window + 2
-    # y: 1D: n_sents, 2D: n_prds, 3D: n_words
-    # word_ids: 1D: n_sents, 2D: n_words
-
-    tr_pre_samples, tr_word_ids = get_samples(train_corpus, vocab_word, vocab_label, argv.window)
-    tr_samples, train_batch_index = theano_format(tr_pre_samples)
+    # samples: 1D: n_sents; Sample
+    train_samples = get_samples(train_corpus, vocab_word, vocab_label, argv.window)
+    train_sample_shared, train_batch_index = get_shared_samples(train_samples)
     print '\nTRAIN',
-    sample_statistics(tr_pre_samples[1], vocab_label)
+    sample_statistics(train_samples, vocab_label)
     n_train_batches = len(train_batch_index)
     print '\tTrain Mini-Batches: %d\n' % n_train_batches
 
     if argv.dev_data:
-        dev_pre_samples, dev_word_ids = get_samples(dev_corpus, vocab_word, vocab_label, argv.window)
-#        dev_samples, dev_batch_index = theano_format(dev_pre_samples)
-        dev_samples = theano_format_online(dev_pre_samples)
-#        n_dev_batches = len(dev_batch_index)
-        n_dev_batches = len(dev_samples[-1])
+        dev_samples = get_samples(dev_corpus, vocab_word, vocab_label, argv.window, test=True)
+        n_dev_batches = len(dev_samples)
         print '\nDEV',
-        sample_statistics(dev_pre_samples[1], vocab_label)
+        sample_statistics(dev_samples, vocab_label)
         print '\tDev Mini-Batches: %d\n' % n_dev_batches
 
     if argv.test_data:
-        test_pre_samples, test_word_ids = get_samples(test_corpus, vocab_word, vocab_label, argv.window)
-#        test_samples, test_batch_index = theano_format(test_pre_samples)
-        test_samples = theano_format_online(test_pre_samples)
-#        n_test_batches = len(test_batch_index)
-        n_test_batches = len(test_samples[-1])
+        test_samples = get_samples(test_corpus, vocab_word, vocab_label, argv.window, test=True)
+        n_test_batches = len(test_samples)
         print '\nTEST',
-        sample_statistics(test_pre_samples[1], vocab_label)
+        sample_statistics(test_samples, vocab_label)
         print '\tTest Mini-Batches: %d\n' % n_test_batches
 
     if argv.check:
-        check_samples(tr_pre_samples, vocab_word, vocab_label)
+        check_samples(train_samples, vocab_word, vocab_label)
 
     ######################
     # BUILD ACTUAL MODEL #
     ######################
     print '\n\nBuilding a model...'
-    model = Model(argv=argv, emb=emb, vocab_word=vocab_word, vocab_label=vocab_label)
-    model.compile()
+    decoder = Decoder(argv=argv, emb=emb, vocab_word=vocab_word, vocab_label=vocab_label)
+    decoder.set_model()
 
-    model.set_train_f(tr_samples)
+    decoder.set_train_f(train_sample_shared)
     if argv.dev_data or argv.test_data:
-        model.set_predict_f()
+        decoder.set_predict_f()
 
     ###############
     # TRAIN MODEL #
@@ -110,13 +104,13 @@ def train(argv):
 
     tr_indices = range(n_train_batches)
 
+    f1_history = {}
     best_dev_f1 = -1.
-    best_test_f1 = -1.
 
     for epoch in xrange(argv.epoch):
         train_eval = Eval()
         dropout_p = np.float32(argv.dropout).astype(theano.config.floatX)
-        model.dropout.set_value(dropout_p)
+        decoder.model.dropout.set_value(dropout_p)
 
         print '\nEpoch: %d' % (epoch + 1)
         print '  TRAIN\n\t',
@@ -130,7 +124,7 @@ def train(argv):
                 sys.stdout.flush()
 
             batch_range = train_batch_index[b_index]
-            result_sys, result_gold, nll = model.train(index=b_index, bos=batch_range[0], eos=batch_range[1])
+            result_sys, result_gold, nll = decoder.train(index=b_index, bos=batch_range[0], eos=batch_range[1])
 
             assert not math.isnan(nll), 'NLL is NAN: Index: %d' % index
 
@@ -146,41 +140,37 @@ def train(argv):
         update = False
         if argv.dev_data:
             print '\n  DEV\n\t',
-            dev_f1 = predict(model, dev_samples)
+            dev_f1 = decoder.predict_all(dev_samples)
             if best_dev_f1 < dev_f1:
                 best_dev_f1 = dev_f1
+                f1_history[epoch+1] = [best_dev_f1]
                 update = True
+
+                if argv.save:
+                    decoder.save_model('model.intra.layer-%d.window-%d.reg-%f' % (argv.layer, argv.window, argv.reg))
+                    decoder.output_results('result.dev.intra.layer-%d.window-%d.reg-%f.txt' %
+                                           (argv.layer, argv.window, argv.reg),
+                                           dev_samples)
 
         if argv.test_data:
             print '\n  TEST\n\t',
-            test_f1 = predict(model, test_samples)
+            test_f1 = decoder.predict_all(test_samples)
             if update:
-                best_test_f1 = test_f1
+                decoder.output_results('result.test.intra.layer-%d.window-%d.reg-%f.txt' %
+                                       (argv.layer, argv.window, argv.reg),
+                                       test_samples)
+                if epoch+1 in f1_history:
+                    f1_history[epoch+1].append(test_f1)
+                else:
+                    f1_history[epoch+1] = [test_f1]
 
-        say('\n\n\tBEST DEV F:{:.2%}\tBEST TEST F:{:.2%}\n'.format(best_dev_f1, best_test_f1))
-
-
-def predict(model, samples):
-    pred_eval = Eval()
-    start = time.time()
-    model.dropout.set_value(0.0)
-
-    for index in xrange(len(samples[0])):
-        if index != 0 and index % 1000 == 0:
-            print index,
-            sys.stdout.flush()
-
-        x = samples[0][index]
-        y = samples[1][index]
-        sent_len = samples[2][index]
-
-        results_sys, results_gold = model.predict(x, y, sent_len)
-        pred_eval.update_results(results_sys, results_gold)
-
-    print '\tTime: %f' % (time.time() - start)
-    pred_eval.show_results()
-
-    return pred_eval.all_f1
+        say('\n\n\tF1 HISTORY')
+        for k, v in sorted(f1_history.items()):
+            if len(v) == 2:
+                say('\n\tEPOCH-{:d}  \tBEST DEV F:{:.2%}\tBEST TEST F:{:.2%}'.format(k, v[0], v[1]))
+            else:
+                say('\n\tEPOCH-{:d}  \tBEST DEV F:{:.2%}'.format(k, v[0]))
+        say('\n\n')
 
 
 def main(argv):
