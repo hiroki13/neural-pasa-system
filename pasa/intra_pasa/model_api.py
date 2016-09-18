@@ -10,7 +10,7 @@ from model import Model
 from eval import Eval
 
 
-class Decoder(object):
+class ModelAPI(object):
 
     def __init__(self, argv, emb, vocab_word, vocab_label):
         self.argv = argv
@@ -201,10 +201,10 @@ class Decoder(object):
             self.model = data['model']
 
 
-class MPDecoder(Decoder):
+class MPModelAPI(ModelAPI):
 
     def __init__(self, argv, emb, vocab_word, vocab_label):
-        super(MPDecoder, self).__init__(argv, emb, vocab_word, vocab_label)
+        super(MPModelAPI, self).__init__(argv, emb, vocab_word, vocab_label)
 
     def set_model(self):
         argv = self.argv

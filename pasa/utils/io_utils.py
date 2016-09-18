@@ -1,11 +1,9 @@
-# -*- coding: utf-8 -*-
-
 import sys
 import gzip
 import cPickle
 from collections import defaultdict
 
-from ling.word import Word, Wordsrl
+from ..ling.word import Word, Wordsrl
 
 
 def say(s, stream=sys.stdout):

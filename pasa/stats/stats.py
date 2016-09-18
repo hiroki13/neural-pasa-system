@@ -1,8 +1,8 @@
 import numpy as np
 
-from utils import io_utils
-from ling.vocab import Vocab
-from intra_pasa.preprocessor import get_samples
+from ..utils import io_utils
+from ..ling.vocab import Vocab
+from ..intra_pasa.preprocessor import get_samples
 
 
 def show_case_dist(corpus):
@@ -166,7 +166,7 @@ def show_stats(argv):
 
     """ Load files """
     # corpus: 1D: n_sents, 2D: n_words, 3D: (word, pas_info, pas_id)
-    corpus, vocab_word = io_utils.load_ntc(path=argv.data, data_size=argv.data_size, vocab_size=argv.vocab_size)
+    corpus, vocab_word = io_utils.load_ntc(path=argv.data, data_size=argv.data_size)
     samples = get_samples(corpus=corpus, vocab_word=vocab_word, vocab_label=vocab_label, window=argv.window)
     print '\nVocab: %d\tType: word\n' % vocab_word.size()
 

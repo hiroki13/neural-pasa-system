@@ -12,15 +12,21 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='The Neural PAS System')
 
-    """ Mode """
+    ########
+    # Mode #
+    ########
     parser.add_argument('-mode', default='train', help='train/test')
 
-    """ Model """
+    #########
+    # Model #
+    #########
     parser.add_argument('--check', type=bool, default=False, help='check')
     parser.add_argument('--save', type=bool, default=True, help='save model')
     parser.add_argument('--load', type=str, default=None, help='load model')
 
-    """ Data """
+    ########
+    # Data #
+    ########
     parser.add_argument('--train_data', help='path to training data')
     parser.add_argument('--dev_data', help='path to development data')
     parser.add_argument('--test_data', help='path to test data')
@@ -29,9 +35,12 @@ if __name__ == '__main__':
     parser.add_argument('--vocab', type=str, default=None, help='vocab')
     parser.add_argument('--label', type=str, default=None, help='label')
 
-    """ Neural Architectures """
+    ########################
+    # Neural Architectures #
+    ########################
     parser.add_argument('--unit', default='gru', help='unit')
     parser.add_argument('--layer',  type=int, default=1, help='number of layers')
+    parser.add_argument('--output_layer',  type=int, default=0, help='softmax/crf')
     parser.add_argument('--window', type=int, default=5, help='window size for convolution')
     parser.add_argument('--dim_emb',    type=int, default=32, help='dimension of embeddings')
     parser.add_argument('--dim_hidden', type=int, default=32, help='dimension of hidden layer')
@@ -39,7 +48,9 @@ if __name__ == '__main__':
     parser.add_argument('--attention', type=int, default=0, help='attention')
     parser.add_argument('--pooling', default='max', help='pooling')
 
-    """ Training Parameters """
+    #######################
+    # Training Parameters #
+    #######################
     parser.add_argument('--batch_size', type=int, default=32, help='mini batch size')
     parser.add_argument('--opt', default='adam', help='optimization method')
     parser.add_argument('--epoch', type=int, default=50, help='number of epochs to train')
@@ -52,7 +63,9 @@ if __name__ == '__main__':
     print argv
     print
 
-    """ Mode  """
+    ########
+    # Mode #
+    ########
     if argv.mode == 'train':
         import train
         train.main(argv)

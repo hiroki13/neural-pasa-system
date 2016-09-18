@@ -1,7 +1,7 @@
 import numpy as np
 import theano
 
-from ling.sample import Sample
+from ..ling.sample import Sample
 
 
 def get_samples(corpus, vocab_word, vocab_label, window=5, test=False):

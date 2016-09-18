@@ -1,8 +1,8 @@
-from utils import io_utils
-from utils.io_utils import say, load_data
+from ..utils import io_utils
+from ..utils.io_utils import say, load_data
+from ..stats.stats import corpus_statistics, sample_statistics
 from preprocessor import get_samples
-from stats.stats import corpus_statistics, sample_statistics
-from decoder import Decoder
+from model_api import ModelAPI
 
 
 def main(argv):
@@ -22,7 +22,7 @@ def main(argv):
     ##################
     # Load a decoder #
     ##################
-    decoder = Decoder(argv, emb, vocab_word, vocab_label)
+    decoder = ModelAPI(argv, emb, vocab_word, vocab_label)
     decoder.load_model(argv)
     dec_argv = decoder.argv
 

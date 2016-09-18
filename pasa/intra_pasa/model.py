@@ -1,14 +1,13 @@
-from nn.utils import L2_sqr, relu, apply_dropout
-from nn.optimizers import ada_grad, ada_delta, adam, sgd
-from nn import gru, lstm
-from nn.crf import CRFLayer
-from nn.embedding import EmbeddingLayer
-from nn.attention import AttentionLayer
-from nn import cnn
-
 import numpy as np
 import theano
 import theano.tensor as T
+
+from ..nn.utils import L2_sqr, relu
+from ..nn.optimizers import ada_grad, ada_delta, adam, sgd
+from ..nn import gru, lstm, cnn
+from ..nn.crf import CRFLayer, Layer
+from ..nn.embedding import EmbeddingLayer
+from ..nn.attention import AttentionLayer
 
 
 class Model(object):
@@ -88,7 +87,7 @@ class Model(object):
         ###########
         self.y_gold = y.reshape((self.batch_size, n_words))
         p_y = layer.y_prob(h, self.y_gold.dimshuffle((1, 0)))
-        self.y_pred = layer.vitabi(h)
+        self.y_pred = layer.decode(h)
 
         ############
         # Training #
@@ -101,7 +100,6 @@ class Model(object):
         self.params += layer.params
 
         x_in = layer.lookup(x)
-#        x_in = apply_dropout(x_in, self.dropout)
 
         return x_in.reshape((self.batch_size, n_words, dim_in))
 
@@ -134,10 +132,13 @@ class Model(object):
             h = layer.convolution(h=h, n_prds=n_prds)
             self.params += layer.params
 
-        #######
-        # CRF #
-        #######
-        layer = CRFLayer(n_i=dim_h * 2, n_h=dim_out)
+        ################
+        # Output layer #
+        ################
+        if self.argv.output_layer == 0:
+            layer = Layer(n_i=dim_h * 2, n_h=dim_out)
+        else:
+            layer = CRFLayer(n_i=dim_h * 2, n_h=dim_out)
         self.params += layer.params
 
         h = relu(T.dot(T.concatenate([x, h], 2), layer.W))
@@ -211,7 +212,7 @@ class MultiSeqModel(Model):
         ###########
         self.y_gold = y.reshape((self.batch_size, n_words))
         p_y = layer.y_prob(h, self.y_gold.dimshuffle((1, 0)))
-        self.y_pred = layer.vitabi(h)
+        self.y_pred = layer.memm(h)
 
         ############
         # Training #

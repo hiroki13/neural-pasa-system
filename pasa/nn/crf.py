@@ -4,12 +4,53 @@ import theano.tensor as T
 from utils import logsumexp, sample_weights
 
 
+class Layer(object):
+
+    def __init__(self, n_i, n_h):
+        self.W = theano.shared(sample_weights(n_i, n_h))
+        self.params = [self.W]
+
+        self.decode = self.memm
+
+    def y_prob(self, h, y):
+        """
+        :param h: 1D: n_words, 2D: Batch, 3D: n_y
+        :param y: 1D: n_words, 2D: Batch
+        :return: gradient of cross entropy: 1D: Batch
+        """
+
+        # 1D: n_words * batch, 2D: n_y
+        h_reshaped = h.reshape((h.shape[0] * h.shape[1], h.shape[2]))
+        p_y = T.nnet.softmax(h_reshaped)
+        # 1D: n_words * batch
+        y = y.flatten()
+        p_y_gold = T.log(p_y[T.arange(y.shape[0]), y])
+        # 1D: batch, 2D: n_words
+        p_y_gold = p_y_gold.reshape((h.shape[0], h.shape[1])).dimshuffle((1, 0))
+        p_y_gold = T.sum(p_y_gold, axis=1)
+
+        return p_y_gold
+
+    def memm(self, h):
+        # 1D: n_words * batch, 2D: n_y
+        h_reshaped = h.reshape((h.shape[0] * h.shape[1], h.shape[2]))
+        p_y = T.nnet.softmax(h_reshaped)
+        # 1D: n_words * batch
+        p_y_hat = T.argmax(p_y, axis=1)
+        # 1D: batch, 2D: n_words
+        p_y_hat = p_y_hat.reshape((h.shape[0], h.shape[1])).dimshuffle((1, 0))
+        return p_y_hat
+
+
 class CRFLayer(object):
+
     def __init__(self, n_i, n_h):
         self.W = theano.shared(sample_weights(n_i, n_h))
         self.W_trans = theano.shared(sample_weights(n_h, n_h))
         self.BOS = theano.shared(sample_weights(n_h))
         self.params = [self.W, self.W_trans, self.BOS]
+
+        self.decode = self.vitabi
 
     def y_prob(self, h, y):
         """
