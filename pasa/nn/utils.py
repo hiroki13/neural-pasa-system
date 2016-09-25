@@ -52,10 +52,20 @@ def build_shared_zeros(shape):
 def logsumexp(x, axis):
     """
     :param x: 1D: batch, 2D: n_y, 3D: n_y
-    :return:
+    :return: 1D: batch, 2D: 1, 3D: n_y
     """
     x_max = T.max(x, axis=axis, keepdims=True)
     return T.log(T.sum(T.exp(x - x_max), axis=axis, keepdims=True)) + x_max
+
+
+def logsumexp_3d(x):
+    """
+    :param x: 1D: batch, 2D: n_y, 3D: n_y
+    :return: 1D: batch, 2D: n_y
+    """
+    x_max = T.max(x, axis=1, keepdims=True)
+    alpha_t = T.log(T.sum(T.exp(x - x_max), axis=1, keepdims=True)) + x_max
+    return alpha_t.reshape((alpha_t.shape[0], alpha_t.shape[2]))
 
 
 def L2_sqr(params):
