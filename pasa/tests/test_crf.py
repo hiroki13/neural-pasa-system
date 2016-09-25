@@ -4,7 +4,60 @@ import theano.tensor as T
 
 
 def main():
-    print test_get_emit_score()
+    print test_get_path_prob()
+
+
+def test_get_path_prob():
+    from ..nn.crf import get_path_prob
+
+    # 1D: n_words, 2D: batch, 3D: n_labels (j)
+    h_in = np.asarray([[[0, 0], [1, 0]],
+                       [[0, 0], [0, 1]]],
+                      dtype='float32')
+    # 1D: n_words, 2D: batch
+    y_in = np.asarray([[0, 0], [0, 1]], dtype='int32')
+    # 1D: n_labels (i), 2D: n_labels (j); transition score from i to j
+    W_in = np.asarray([[1, 1], [1, 1]], dtype='float32')
+
+    h = T.ftensor3()
+    y = T.imatrix()
+    W = T.fmatrix()
+
+    f = theano.function(inputs=[h, y, W],
+                        outputs=get_path_prob(h, y, W),
+                        on_unused_input='ignore')
+    return f(h_in, y_in, W_in)
+
+
+def test_get_path_score():
+    """
+    :return: [26, 35, 39]
+    """
+    from ..nn.crf import get_path_score, get_emit_score, get_transition_score
+
+    # 1D: n_words, 2D: batch, 3D: n_labels
+    h_in = np.asarray([[[1, 2], [3, 4], [5, 6]],
+                       [[7, 8], [9, 10], [11, 12]],
+                       [[13, 14], [15, 16], [17, 18]]],
+                      dtype='int32')
+    # 1D: n_words, 2D: batch
+    y_in = np.asarray([[1, 0, 0], [0, 1, 1], [0, 1, 0]], dtype='int32')
+    # 1D: n_labels (i), 2D: n_labels (j)
+    W_in = np.asarray([[1, 2], [3, 4]], dtype='int32')
+
+    h = T.itensor3()
+    y = T.imatrix()
+    W = T.imatrix()
+
+    f = theano.function(inputs=[h, y, W],
+                        outputs=get_path_score(h, y, W),
+                        on_unused_input='ignore')
+    e = theano.function(inputs=[h, y],
+                        outputs=get_emit_score(h, y),
+                        on_unused_input='ignore')
+    t = theano.function(inputs=[y, W],
+                        outputs=get_transition_score(y, W))
+    return f(h_in, y_in, W_in), e(h_in, y_in), t(y_in, W_in)
 
 
 def test_get_emit_score():
@@ -14,7 +67,10 @@ def test_get_emit_score():
     from ..nn.crf import get_emit_score
 
     # 1D: n_words, 2D: batch, 3D: n_labels
-    h_in = np.asarray([[[1, 2], [3, 4], [5, 6]], [[7, 8], [9, 10], [11, 12]], [[13, 14], [15, 16], [17, 18]]], dtype='int32')
+    h_in = np.asarray([[[1, 2], [3, 4], [5, 6]],
+                       [[7, 8], [9, 10], [11, 12]],
+                       [[13, 14], [15, 16], [17, 18]]],
+                      dtype='int32')
     # 1D: n_words, 2D: batch
     y_in = np.asarray([[1, 0, 0], [0, 1, 1], [0, 1, 0]], dtype='int32')
 
@@ -28,16 +84,61 @@ def test_get_emit_score():
 
 
 def test_get_transition_score():
+    """
+    :return: [[3, 2, 2], [1, 4, 3]]
+    """
     from ..nn.crf import get_transition_score
 
-    M = np.asarray([[1, 2], [3, 4]], dtype='int32')
+    # 1D: n_words, 2D: batch; label id
     y_in = np.asarray([[1, 0, 0], [0, 1, 1], [0, 1, 0]], dtype='int32')
+    # 1D: n_labels (i), 2D: n_labels (j); transition score from i to j
+    W_in = np.asarray([[1, 2], [3, 4]], dtype='int32')
 
-    trans_matrix = T.imatrix()
     y = T.imatrix()
+    W = T.imatrix()
 
-    f = theano.function(inputs=[y, trans_matrix], outputs=get_transition_score(y, trans_matrix))
-    return f(M, y_in)
+    f = theano.function(inputs=[y, W],
+                        outputs=get_transition_score(y, W))
+    return f(y_in, W_in)
+
+
+def test_viterbi_search():
+    from ..nn.crf import viterbi_search
+
+    # 1D: batch, 2D: n_labels (j)
+    h_in = np.asarray([[[2, 1], [4, 3], [6, 5]], [[4, 1], [2, 3], [3, 5]]], dtype='float32')
+    # 1D: n_labels (i), 2D: n_labels (j); transition score from i to j
+    W_in = np.asarray([[1, 1], [1, 1]], dtype='float32')
+
+    h = T.ftensor3()
+    W = T.fmatrix()
+
+    f = theano.function(inputs=[h, W],
+                        outputs=viterbi_search(h, W),
+                        on_unused_input='ignore')
+
+    return f(h_in, W_in)
+
+
+def test_forward_viterbi():
+    from ..nn.crf import forward_viterbi
+
+    # 1D: batch, 2D: n_labels (j)
+    h_in = np.asarray([[1, 2], [3, 4], [5, 6]], dtype='float32')
+    # 1D: batch, 2D: n_labels (i)
+    scores_prev_in = np.asarray([[1, 2], [3, 4], [5, 6]], dtype='float32')
+    # 1D: n_labels (i), 2D: n_labels (j); transition score from i to j
+    W_in = np.asarray([[1, 2], [3, 4]], dtype='float32')
+
+    h = T.fmatrix()
+    scores_prev = T.fmatrix()
+    W = T.fmatrix()
+
+    f = theano.function(inputs=[h, scores_prev, W],
+                        outputs=forward_viterbi(h, scores_prev, W),
+                        on_unused_input='ignore')
+
+    return f(h_in, scores_prev_in, W_in)
 
 
 def test_forward_alpha():
@@ -62,17 +163,17 @@ def test_forward_alpha():
     # 1D: batch, 2D: n_labels
     scores_prev_in = np.asarray([[1, 2], [3, 4], [5, 6]], dtype='float32')
     # 1D: n_labels (i), 2D: n_labels (j); transition score from i to j
-    M = np.asarray([[1, 2], [3, 4]], dtype='float32')
+    W_in = np.asarray([[1, 2], [3, 4]], dtype='float32')
 
     h = T.fmatrix()
     scores_prev = T.fmatrix()
-    trans_matrix = T.fmatrix()
+    W = T.fmatrix()
 
-    f = theano.function(inputs=[h, scores_prev, trans_matrix],
-                        outputs=forward_alpha(h, scores_prev, trans_matrix),
+    f = theano.function(inputs=[h, scores_prev, W],
+                        outputs=forward_alpha(h, scores_prev, W),
                         on_unused_input='ignore')
 
-    return f(h_in, scores_prev_in, M)
+    return f(h_in, scores_prev_in, W_in)
 
 
 def test_get_all_path_score():
@@ -84,16 +185,16 @@ def test_get_all_path_score():
     # 1D: n_words, 2D: batch, 3D: n_labels
     h_in = np.asarray([[[2, 1], [4, 3], [6, 5]], [[1, 2], [3, 4], [5, 6]]], dtype='float32')
     # 1D: n_labels (i), 2D: n_labels (j); transition score from i to j
-    M = np.asarray([[1, 2], [3, 4]], dtype='float32')
+    W_in = np.asarray([[1, 2], [3, 4]], dtype='float32')
 
     h = T.ftensor3()
-    trans_matrix = T.fmatrix()
+    W = T.fmatrix()
 
-    f = theano.function(inputs=[h, trans_matrix],
-                        outputs=get_all_path_score(h, trans_matrix),
+    f = theano.function(inputs=[h, W],
+                        outputs=get_all_path_score(h, W),
                         on_unused_input='ignore')
 
-    return f(h_in, M)
+    return f(h_in, W_in)
 
 
 if __name__ == '__main__':

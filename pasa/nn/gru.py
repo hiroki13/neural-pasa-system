@@ -8,11 +8,15 @@ import cnn
 
 
 def set_layers(x, batch, n_fin, n_h, dropout, n_layers=1):
+    """
+    :param x: 1D: batch, 2D: n_words, 3D: dim_in (dim_emb * (5 + window + 1))
+    :return: 1D: n_words, 2D: batch, 3D: dim_h
+    """
     params = []
 
     for i in xrange(n_layers):
-        # h: 1D: n_words, 2D: Batch, 3D n_h
-        # h0: 1D: Batch, 2D: n_h
+        # h: 1D: n_words, 2D: batch, 3D n_h
+        # h0: 1D: batch, 2D: n_h
         if i == 0:
             layer = FirstLayer(n_i=n_fin, n_h=n_h)
             x_i = relu(T.dot(x.dimshuffle(1, 0, 2), layer.W))
@@ -90,7 +94,7 @@ def layers_mp(x, batch, n_prds, n_fin, n_h, n_y, dropout, attention, mp_cnn=0, n
     #############
     # CRF layer #
     #############
-    layer = CRFLayer(n_i=n_h * 2, n_h=n_y)
+    layer = CRFLayer(n_i=n_h * 2, n_labels=n_y)
     params.extend(layer.params)
     h = relu(T.dot(T.concatenate([layer_input, h], 2), layer.W))
 

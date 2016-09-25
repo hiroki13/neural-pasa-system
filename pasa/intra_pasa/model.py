@@ -73,7 +73,7 @@ class Model(object):
         opt = argv.opt
         unit = argv.unit
         pooling = argv.pooling
-        n_layers = argv.layer
+        n_layers = argv.layers
 
         ################
         # Architecture #
@@ -86,7 +86,7 @@ class Model(object):
         # Outputs #
         ###########
         self.y_gold = y.reshape((self.batch_size, n_words))
-        p_y = layer.y_prob(h, self.y_gold.dimshuffle((1, 0)))
+        p_y = layer.get_y_prob(h, self.y_gold.dimshuffle((1, 0)))
         self.y_pred = layer.decode(h)
 
         ############
@@ -96,6 +96,10 @@ class Model(object):
         self.update = self.optimize(opt, self.cost, lr)
 
     def embedding_layer(self, x, n_words, n_vocab, dim_emb, dim_in, init_emb):
+        """
+        :param x: 1D: batch * n_words, 2D: 5 + window + 1; elem=word_id
+        :return: 1D: batch, 2D: n_words, 3D: dim_in (dim_emb * (5 + window + 1))
+        """
         layer = EmbeddingLayer(n_vocab, dim_emb, init_emb)
         self.params += layer.params
 
@@ -104,6 +108,11 @@ class Model(object):
         return x_in.reshape((self.batch_size, n_words, dim_in))
 
     def intermediate_layers(self, x, dim_in, dim_h, unit, n_layers):
+        """
+        :param x: 1D: batch, 2D: n_words, 3D: dim_in (dim_emb * (5 + window + 1))
+        :return: x: 1D: n_words, 2D: batch, 3D: dim_h
+        :return: h: 1D: n_words, 2D: batch, 3D: dim_h
+        """
         if unit.lower() == 'lstm':
             layers = lstm.layers
         else:
@@ -116,6 +125,11 @@ class Model(object):
         return x, h
 
     def output_layer(self, x, h, dim_h, dim_out, n_layers, n_prds, attention, pooling):
+        """
+        :param x: 1D: n_words, 2D: batch, 3D: dim_h
+        :param h: 1D: n_words, 2D: batch, 3D: dim_h
+        :return: 1D: n_words, 2D: batch, 3D: dim_h
+        """
         #######################
         # Attention mechanism #
         #######################
@@ -136,13 +150,12 @@ class Model(object):
         # Output layer #
         ################
         if self.argv.output_layer == 0:
-            layer = Layer(n_i=dim_h * 2, n_h=dim_out)
+            layer = Layer(n_i=dim_h * 2, n_labels=dim_out)
         else:
-            layer = CRFLayer(n_i=dim_h * 2, n_h=dim_out)
+            layer = CRFLayer(n_i=dim_h * 2, n_labels=dim_out)
         self.params += layer.params
 
-        h = relu(T.dot(T.concatenate([x, h], 2), layer.W))
-
+        h = layer.forward(x, h)
         if n_layers % 2 == 0:
             h = h[::-1]
 
@@ -211,7 +224,7 @@ class MultiSeqModel(Model):
         # Outputs #
         ###########
         self.y_gold = y.reshape((self.batch_size, n_words))
-        p_y = layer.y_prob(h, self.y_gold.dimshuffle((1, 0)))
+        p_y = layer.get_y_prob(h, self.y_gold.dimshuffle((1, 0)))
         self.y_pred = layer.memm(h)
 
         ############

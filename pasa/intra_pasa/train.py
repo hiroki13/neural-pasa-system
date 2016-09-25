@@ -163,9 +163,9 @@ def train(argv, model_api, train_batch_index, dev_samples, test_samples):
                 update = True
 
                 if argv.save:
-                    model_api.save_model('model.intra.layer-%d.window-%d.reg-%f' % (argv.layer, argv.window, argv.reg))
-                    model_api.output_results('result.dev.intra.layer-%d.window-%d.reg-%f.txt' %
-                                           (argv.layer, argv.window, argv.reg),
+                    model_api.save_model('model.intra.layers-%d.window-%d.reg-%f' % (argv.layers, argv.window, argv.reg))
+                    model_api.output_results('result.dev.intra.layers-%d.window-%d.reg-%f.txt' %
+                                           (argv.layers, argv.window, argv.reg),
                                            dev_samples)
 
         ########

@@ -31,7 +31,7 @@ def layers(x, batch, n_fin, n_h, n_y, n_layers=1, dropout=0.1):
 
         params.extend(layer.params)
 
-    layer = CRFLayer(n_i=n_h*2, n_h=n_y)
+    layer = CRFLayer(n_i=n_h*2, n_labels=n_y)
     params.extend(layer.params)
     h = relu(T.dot(T.concatenate([layer_input, h], 2), layer.W))
 
