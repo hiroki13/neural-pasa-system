@@ -2,12 +2,12 @@ import numpy as np
 import theano
 import theano.tensor as T
 
-from ..nn.utils import L2_sqr, relu
+from ..utils.io_utils import say
+from ..nn.rnn import GRU
+from ..nn.utils import L2_sqr
 from ..nn.optimizers import ada_grad, ada_delta, adam, sgd
-from ..nn import gru, lstm, cnn
-from ..nn.crf import CRFLayer, Layer
+from ..nn.seq_labeling import Layer, MEMMLayer, CRFLayer
 from ..nn.embedding import EmbeddingLayer
-from ..nn.attention import AttentionLayer
 
 
 class Model(object):
@@ -18,7 +18,6 @@ class Model(object):
         self.emb = emb
         self.n_vocab = vocab_word.size()
         self.n_labels = vocab_label.size()
-        self.batch_size = None
         self.dropout = None
 
         ###################
@@ -29,6 +28,7 @@ class Model(object):
         ####################
         # Output variables #
         ####################
+        self.p_y = None
         self.y_gold = None
         self.y_pred = None
         self.nll = None
@@ -37,6 +37,7 @@ class Model(object):
         ##############
         # Parameters #
         ##############
+        self.layers = []
         self.params = []
         self.update = None
 
@@ -55,10 +56,9 @@ class Model(object):
         ##############
         # Dimensions #
         ##############
-        self.batch_size = x.shape[0] / n_words
-        window = 5 + argv.window + 1
+        batch_size = x.shape[0] / n_words
         dim_emb = argv.dim_emb if init_emb is None else len(init_emb[0])
-        dim_in = dim_emb * window
+        dim_in = dim_emb * (5 + argv.window + 1)
         dim_h = argv.dim_hidden
         dim_out = self.n_labels
         n_vocab = self.n_vocab
@@ -67,99 +67,111 @@ class Model(object):
         # Hyperparameters #
         ###################
         self.dropout = theano.shared(np.float32(argv.dropout).astype(theano.config.floatX))
-        attention = argv.attention
         lr = argv.lr
         reg = argv.reg
         opt = argv.opt
         unit = argv.unit
-        pooling = argv.pooling
+        search = argv.search
         n_layers = argv.layers
 
-        ################
-        # Architecture #
-        ################
-        x = self.embedding_layer(x, n_words, n_vocab, dim_emb, dim_in, init_emb)
-        x, h = self.intermediate_layers(x, dim_in, dim_h, unit, n_layers)
-        h, layer = self.output_layer(x, h, dim_h, dim_out, n_layers, n_prds, attention, pooling)
+        ##############
+        # Parameters #
+        ##############
+        self.set_layers(unit, search, n_vocab, init_emb, dim_emb, dim_in, dim_h, dim_out, n_layers)
+        self.set_params()
+
+        ############
+        # Networks #
+        ############
+        x = self.embedding_layer(x, batch_size, n_words)
+        x, h = self.mid_layers(x, batch_size, dim_h)
+        h = self.output_layer(x, h)
 
         ###########
         # Outputs #
         ###########
-        self.y_gold = y.reshape((self.batch_size, n_words))
-        p_y = layer.get_y_prob(h, self.y_gold.dimshuffle((1, 0)))
+        layer = self.layers[-1]
+        self.y_gold = y.reshape((batch_size, n_words))
         self.y_pred = layer.decode(h)
+        self.p_y = layer.get_y_prob(h, self.y_gold.dimshuffle((1, 0)))
 
         ############
         # Training #
         ############
-        self.nll, self.cost = self.objective_f(p_y, reg)
+        self.nll, self.cost = self.objective_f(self.p_y, reg)
         self.update = self.optimize(opt, self.cost, lr)
 
-    def embedding_layer(self, x, n_words, n_vocab, dim_emb, dim_in, init_emb):
+    def set_layers(self, unit, search, n_vocab, init_emb, n_in, n_fin, n_h, n_y, n_layers):
+        ###################
+        # Embedding layer #
+        ###################
+        self.layers.append(EmbeddingLayer(n_vocab, n_in, init_emb))
+
+        ##############
+        # Mid layers #
+        ##############
+        if unit.lower() == 'gru':
+            layer = GRU
+
+        for i in xrange(n_layers):
+            if i == 0:
+                self.layers.append(layer(n_i=n_fin, n_h=n_h))
+            else:
+                self.layers.append(layer(n_i=n_h*2, n_h=n_h))
+
+        #################
+        # Output layers #
+        #################
+        if self.argv.output_layer == 0:
+            self.layers.append(Layer(n_i=n_h*2, n_labels=n_y))
+        elif self.argv.output_layer == 1:
+            self.layers.append(MEMMLayer(n_i=n_h*2, n_labels=n_y, search_mode=search))
+        else:
+            self.layers.append(CRFLayer(n_i=n_h*2, n_labels=n_y, search_mode=search))
+
+        say('No. of hidden layers: %d\n' % (len(self.layers)-2))
+
+    def set_params(self):
+        for l in self.layers:
+            self.params += l.params
+        say("No. of parameters: {}\n".format(sum(len(x.get_value(borrow=True).ravel()) for x in self.params)))
+
+    def embedding_layer(self, x, batch, n_words):
         """
         :param x: 1D: batch * n_words, 2D: 5 + window + 1; elem=word_id
         :return: 1D: batch, 2D: n_words, 3D: dim_in (dim_emb * (5 + window + 1))
         """
-        layer = EmbeddingLayer(n_vocab, dim_emb, init_emb)
-        self.params += layer.params
+        return self.layers[0].lookup(x).reshape((batch, n_words, -1))
 
-        x_in = layer.lookup(x)
-
-        return x_in.reshape((self.batch_size, n_words, dim_in))
-
-    def intermediate_layers(self, x, dim_in, dim_h, unit, n_layers):
+    def mid_layers(self, x, batch, dim_h):
         """
         :param x: 1D: batch, 2D: n_words, 3D: dim_in (dim_emb * (5 + window + 1))
         :return: x: 1D: n_words, 2D: batch, 3D: dim_h
         :return: h: 1D: n_words, 2D: batch, 3D: dim_h
         """
-        if unit.lower() == 'lstm':
-            layers = lstm.layers
-        else:
-            layers = gru.set_layers
-
-        params, h, x = layers(x=x, batch=self.batch_size, n_fin=dim_in, n_h=dim_h,
-                              dropout=self.dropout, n_layers=n_layers)
-        self.params += params
-
+        for i in xrange(len(self.layers)-2):
+            layer = self.layers[i+1]
+            # h0: 1D: batch, 2D: n_h
+            if i == 0:
+                x = layer.dot(x.dimshuffle(1, 0, 2))
+                h0 = T.zeros((batch, dim_h), dtype=theano.config.floatX)
+            else:
+                x = layer.dot(T.concatenate([x, h], 2))[::-1]
+                h0 = x[0]
+            # 1D: n_words, 2D: batch, 3D n_h
+            h = layer.forward_all(x, h0)
         return x, h
 
-    def output_layer(self, x, h, dim_h, dim_out, n_layers, n_prds, attention, pooling):
+    def output_layer(self, x, h):
         """
         :param x: 1D: n_words, 2D: batch, 3D: dim_h
         :param h: 1D: n_words, 2D: batch, 3D: dim_h
         :return: 1D: n_words, 2D: batch, 3D: dim_h
         """
-        #######################
-        # Attention mechanism #
-        #######################
-        if attention == 1:
-            layer = AttentionLayer(n_h=dim_h)
-            h = layer.multi_prd_attention(h=h, n_prds=n_prds)
-            self.params += layer.params
-        elif attention == 2:
-            if pooling == 'max':
-                p = T.max
-            else:
-                p = T.mean
-            layer = cnn.Layer(n_h=dim_h, pooling=p)
-            h = layer.convolution(h=h, n_prds=n_prds)
-            self.params += layer.params
-
-        ################
-        # Output layer #
-        ################
-        if self.argv.output_layer == 0:
-            layer = Layer(n_i=dim_h * 2, n_labels=dim_out)
-        else:
-            layer = CRFLayer(n_i=dim_h * 2, n_labels=dim_out)
-        self.params += layer.params
-
-        h = layer.forward(x, h)
-        if n_layers % 2 == 0:
+        h = self.layers[-1].forward(x, h)
+        if (len(self.layers) - 2) % 2 == 0:
             h = h[::-1]
-
-        return h, layer
+        return h
 
     def objective_f(self, p_y, reg):
         nll = - T.mean(p_y)
@@ -217,7 +229,7 @@ class MultiSeqModel(Model):
         # Architecture #
         ################
         x = self.embedding_layer(x, n_words, n_vocab, dim_emb, dim_in, init_emb)
-        x, h = self.intermediate_layers(x, dim_in, dim_h, unit, n_layers)
+        x, h = self.mid_layers(x, dim_in, dim_h, unit, n_layers)
         h, layer = self.output_layer(x, h, dim_h, dim_out, n_layers)
 
         ###########

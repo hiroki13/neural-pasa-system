@@ -57,6 +57,7 @@ if __name__ == '__main__':
     parser.add_argument('--lr', type=float, default=0.0075, help='learning rate')
     parser.add_argument('--reg', type=float, default=0.0001, help='learning rate')
     parser.add_argument('--init_emb', default=None, help='Initial embedding to be loaded')
+    parser.add_argument('--search', type=int, default=0, help='search mode')
 
     argv = parser.parse_args()
     print

@@ -2,7 +2,7 @@ import theano
 import theano.tensor as T
 
 from utils import sigmoid, tanh, relu, build_shared_zeros, sample_weights
-from crf import CRFLayer
+from seq_labeling import CRFLayer
 
 
 def layers(x, batch, n_fin, n_h, n_y, n_layers=1, dropout=0.1):

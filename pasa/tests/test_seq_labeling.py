@@ -4,11 +4,97 @@ import theano.tensor as T
 
 
 def main():
-    print test_get_path_prob()
+    print test_get_path_prob_memm()
 
 
-def test_get_path_prob():
-    from ..nn.crf import get_path_prob
+def test_get_path_prob_memm():
+    from ..nn.seq_labeling import get_path_prob_memm
+
+    # 1D: n_words, 2D: batch, 3D: n_labels (j)
+    h_in = np.asarray([[[0, 3], [1, 0]],
+                       [[1, 2], [0, 1]]],
+                      dtype='float32')
+    # 1D: n_words, 2D: batch
+    y_in = np.asarray([[0, 0], [0, 1]], dtype='int32')
+    # 1D: n_labels (i), 2D: n_labels (j); transition score from i to j
+    W_in = np.asarray([[1, 2], [3, 4]], dtype='float32')
+
+    h = T.ftensor3()
+    y = T.imatrix()
+    W = T.fmatrix()
+
+    f = theano.function(inputs=[h, y, W],
+                        outputs=get_path_prob_memm(h, y, W),
+                        on_unused_input='ignore')
+    # 1D: n_words, 2D: batch; sum of the all the label scores
+    return f(h_in, y_in, W_in)
+
+
+def test_get_state_score():
+    from ..nn.seq_labeling import get_state_score
+
+    # 1D: n_words, 2D: batch, 3D: n_labels (j)
+    h_in = np.asarray([[[0, 3], [1, 0]],
+                       [[1, 2], [0, 1]]],
+                      dtype='float32')
+    # 1D: n_words, 2D: batch
+    y_in = np.asarray([[0, 0], [0, 1]], dtype='int32')
+    # 1D: n_labels (i), 2D: n_labels (j); transition score from i to j
+    W_in = np.asarray([[1, 2], [3, 4]], dtype='float32')
+
+    h = T.ftensor3()
+    y = T.imatrix()
+    W = T.fmatrix()
+
+    f = theano.function(inputs=[h, y, W],
+                        outputs=get_state_score(h, y, W),
+                        on_unused_input='ignore')
+    # 1D: n_words, 2D: batch; sum of the all the label scores
+    return f(h_in, y_in, W_in)
+
+
+def test_get_state_score_z():
+    from ..nn.seq_labeling import get_state_score_z
+
+    # 1D: n_words, 2D: batch, 3D: n_labels (j)
+    h_in = np.asarray([[[0, 3], [1, 0]],
+                       [[1, 2], [0, 1]]],
+                      dtype='float32')
+    # 1D: n_words, 2D: batch
+    y_in = np.asarray([[0, 0], [0, 1]], dtype='int32')
+    # 1D: n_labels (i), 2D: n_labels (j); transition score from i to j
+    W_in = np.asarray([[1, 2], [3, 4]], dtype='float32')
+
+    h = T.ftensor3()
+    y = T.imatrix()
+    W = T.fmatrix()
+
+    f = theano.function(inputs=[h, y, W],
+                        outputs=get_state_score_z(h, y, W),
+                        on_unused_input='ignore')
+    # 1D: n_words, 2D: batch; sum of the all the label scores
+    return f(h_in, y_in, W_in)
+
+
+def test_get_transition_scores():
+    from ..nn.seq_labeling import get_transition_scores
+
+    # 1D: n_words, 2D: batch
+    y_in = np.asarray([[0, 0], [0, 1], [1, 0]], dtype='int32')
+    # 1D: n_labels (i), 2D: n_labels (j); transition score from i to j
+    W_in = np.asarray([[1, 2], [3, 4]], dtype='float32')
+
+    y = T.imatrix()
+    W = T.fmatrix()
+
+    f = theano.function(inputs=[y, W],
+                        outputs=get_transition_scores(y, W),
+                        on_unused_input='ignore')
+    return f(y_in, W_in)
+
+
+def test_get_path_prob_crf():
+    from ..nn.seq_labeling import get_path_prob_crf
 
     # 1D: n_words, 2D: batch, 3D: n_labels (j)
     h_in = np.asarray([[[0, 0], [1, 0]],
@@ -24,7 +110,7 @@ def test_get_path_prob():
     W = T.fmatrix()
 
     f = theano.function(inputs=[h, y, W],
-                        outputs=get_path_prob(h, y, W),
+                        outputs=get_path_prob_crf(h, y, W),
                         on_unused_input='ignore')
     return f(h_in, y_in, W_in)
 
@@ -33,7 +119,7 @@ def test_get_path_score():
     """
     :return: [26, 35, 39]
     """
-    from ..nn.crf import get_path_score, get_emit_score, get_transition_score
+    from ..nn.seq_labeling import get_path_score, get_emit_score, get_transition_score
 
     # 1D: n_words, 2D: batch, 3D: n_labels
     h_in = np.asarray([[[1, 2], [3, 4], [5, 6]],
@@ -64,7 +150,7 @@ def test_get_emit_score():
     """
     :return: [[2 (0, 0, 1), 3 (0, 1, 0), 5 (0, 2, 0)], [7, 10, 12], [13, 16, 17]]
     """
-    from ..nn.crf import get_emit_score
+    from ..nn.seq_labeling import get_emit_score
 
     # 1D: n_words, 2D: batch, 3D: n_labels
     h_in = np.asarray([[[1, 2], [3, 4], [5, 6]],
@@ -87,7 +173,7 @@ def test_get_transition_score():
     """
     :return: [[3, 2, 2], [1, 4, 3]]
     """
-    from ..nn.crf import get_transition_score
+    from ..nn.seq_labeling import get_transition_score
 
     # 1D: n_words, 2D: batch; label id
     y_in = np.asarray([[1, 0, 0], [0, 1, 1], [0, 1, 0]], dtype='int32')
@@ -103,7 +189,7 @@ def test_get_transition_score():
 
 
 def test_viterbi_search():
-    from ..nn.crf import viterbi_search
+    from ..nn.seq_labeling import viterbi_search
 
     # 1D: batch, 2D: n_labels (j)
     h_in = np.asarray([[[2, 1], [4, 3], [6, 5]], [[4, 1], [2, 3], [3, 5]]], dtype='float32')
@@ -121,7 +207,7 @@ def test_viterbi_search():
 
 
 def test_forward_viterbi():
-    from ..nn.crf import forward_viterbi
+    from ..nn.seq_labeling import forward_viterbi
 
     # 1D: batch, 2D: n_labels (j)
     h_in = np.asarray([[1, 2], [3, 4], [5, 6]], dtype='float32')
@@ -156,7 +242,7 @@ def test_forward_alpha():
          [ 10.0485878   12.0485878 ]
          [ 14.0485878   16.0485878 ]]
     """
-    from ..nn.crf import forward_alpha
+    from ..nn.seq_labeling import forward_alpha
 
     # 1D: batch, 2D: n_labels
     h_in = np.asarray([[1, 2], [3, 4], [5, 6]], dtype='float32')
@@ -176,11 +262,11 @@ def test_forward_alpha():
     return f(h_in, scores_prev_in, W_in)
 
 
-def test_get_all_path_score():
+def test_get_path_score_z():
     """
     :return: [  7.44018936  11.44019032  15.44019032]
     """
-    from ..nn.crf import get_all_path_score
+    from ..nn.seq_labeling import get_path_score_z
 
     # 1D: n_words, 2D: batch, 3D: n_labels
     h_in = np.asarray([[[2, 1], [4, 3], [6, 5]], [[1, 2], [3, 4], [5, 6]]], dtype='float32')
@@ -191,7 +277,7 @@ def test_get_all_path_score():
     W = T.fmatrix()
 
     f = theano.function(inputs=[h, W],
-                        outputs=get_all_path_score(h, W),
+                        outputs=get_path_score_z(h, W),
                         on_unused_input='ignore')
 
     return f(h_in, W_in)

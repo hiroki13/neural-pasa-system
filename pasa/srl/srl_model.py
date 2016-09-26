@@ -1,7 +1,7 @@
 from nn.utils import sample_weights, build_shared_zeros, L2_sqr
 from nn.optimizers import ada_grad, ada_delta, adam, sgd
-from nn import gru, lstm
-from nn.crf import y_prob, vitabi
+from nn import rnn, lstm
+from nn.seq_labeling import y_prob, vitabi
 
 import numpy as np
 import theano
@@ -24,7 +24,7 @@ class Model(object):
         if unit == 'lstm':
             self.layers = lstm.layers
         else:
-            self.layers = gru.set_layers
+            self.layers = rnn.set_layers
 
         self.pad = build_shared_zeros((1, dim_emb))
         if init_emb is None:
