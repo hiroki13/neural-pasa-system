@@ -28,12 +28,23 @@ def set_layers(x, batch, n_fin, n_h, dropout, n_layers=1):
     return h, x
 
 
+class ConnectedLayer(object):
+
+    def __init__(self, n_i=32, n_h=32, activation=tanh):
+        self.activation = activation
+        self.W = theano.shared(sample_weights(n_i, n_h))
+        self.params = [self.W]
+
+    def dot(self, x):
+        return T.dot(x, self.W)
+
+
 class GRU(object):
 
     def __init__(self, n_i=32, n_h=32, activation=tanh):
         self.activation = activation
 
-        self.W = theano.shared(sample_weights(n_i, n_h))
+#        self.W = theano.shared(sample_weights(n_i, n_h))
 
         self.W_xr = theano.shared(sample_weights(n_h, n_h))
         self.W_hr = theano.shared(sample_weights(n_h, n_h))
@@ -44,7 +55,8 @@ class GRU(object):
         self.W_xh = theano.shared(sample_weights(n_h, n_h))
         self.W_hh = theano.shared(sample_weights(n_h, n_h))
 
-        self.params = [self.W, self.W_xr, self.W_hr, self.W_xz, self.W_hz, self.W_xh, self.W_hh]
+#        self.params = [self.W, self.W_xr, self.W_hr, self.W_xz, self.W_hz, self.W_xh, self.W_hh]
+        self.params = [self.W_xr, self.W_hr, self.W_xz, self.W_hz, self.W_xh, self.W_hh]
 
     def forward(self, xr_t, xz_t, xh_t, h_tm1):
         r_t = sigmoid(xr_t + T.dot(h_tm1, self.W_hr))
@@ -60,8 +72,8 @@ class GRU(object):
         h, _ = theano.scan(fn=self.forward, sequences=[xr, xz, xh], outputs_info=[h0])
         return h
 
-    def dot(self, x):
-        return relu(T.dot(x, self.W))
+#    def dot(self, x):
+#        return relu(T.dot(x, self.W))
 
 
 def layers_mp(x, batch, n_prds, n_fin, n_h, n_y, dropout, attention, mp_cnn=0, n_layers=1):

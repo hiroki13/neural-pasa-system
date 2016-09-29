@@ -195,14 +195,14 @@ class Layer(object):
         self.W = theano.shared(sample_weights(n_i, n_labels))
         self.params = [self.W]
 
-    def forward(self, x, h):
+    def forward(self, x):
         """
         :param x: 1D: n_words, 2D: batch, 3D: dim_h
         :param h: 1D: n_words, 2D: batch, 3D: dim_h
         :return: 1D: n_words, 2D: batch, 3D: n_labels; log probability of a label
         """
         # 1D: n_words, 2D: batch, 3D: n_labels
-        h = relu(T.dot(T.concatenate([x, h], 2), self.W))
+        h = T.dot(x, self.W)
         # 1D: n_words * batch, 2D: n_labels
         h_reshaped = h.reshape((h.shape[0] * h.shape[1], h.shape[2]))
         return T.log(T.nnet.softmax(h_reshaped).reshape((h.shape[0], h.shape[1], -1)))
@@ -226,8 +226,7 @@ class Layer(object):
 
 class MEMMLayer(object):
 
-    def __init__(self, n_i, n_labels, search_mode):
-        self.search_mode = search_mode
+    def __init__(self, n_i, n_labels):
         self.W = theano.shared(sample_weights(n_i, n_labels))
         self.W_trans = theano.shared(sample_weights(n_labels, n_labels))
         self.params = [self.W, self.W_trans]
@@ -253,15 +252,12 @@ class MEMMLayer(object):
         :param h: 1D: n_words * batch, 2D: n_labels
         :return: 1D: batch, 2D: n_words; the highest scoring sequence (label id)
         """
-        if self.search_mode == 0:
-            return greedy_search(h, self.W_trans).dimshuffle(1, 0)
-        return viterbi_search(h, self.W_trans).dimshuffle(1, 0)
+        return greedy_search(h, self.W_trans).dimshuffle(1, 0)
 
 
 class CRFLayer(object):
 
-    def __init__(self, n_i, n_labels, search_mode):
-        self.search_mode = search_mode
+    def __init__(self, n_i, n_labels):
         self.W = theano.shared(sample_weights(n_i, n_labels))
         self.W_trans = theano.shared(sample_weights(n_labels, n_labels))
         self.params = [self.W, self.W_trans]
@@ -287,6 +283,4 @@ class CRFLayer(object):
         :param h: 1D: n_words, 2D: batch, 3D: n_labels
         :return: 1D: batch, 2D: n_words; the highest scoring sequence (label id)
         """
-        if self.search_mode == 0:
-            return greedy_search(h, self.W_trans).dimshuffle(1, 0)
         return viterbi_search(h, self.W_trans).dimshuffle(1, 0)

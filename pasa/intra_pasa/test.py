@@ -6,9 +6,12 @@ from model_api import ModelAPI
 
 
 def main(argv):
-    emb = None
+    say('\n\nSETTING UP AN INTRA-SENTENTIAL PASA TEST SETTING\n')
 
-    say('\nLoading...\n\n')
+    config = load_data(argv.load_config)
+    print '\nLoaded config\n'
+    print config
+    print
 
     ####################
     # Load vocab files #
@@ -18,13 +21,6 @@ def main(argv):
 
     vocab_word = load_data(argv.vocab)
     say('\nVocab: %d\tType: word\n' % vocab_word.size())
-
-    ##################
-    # Load a decoder #
-    ##################
-    decoder = ModelAPI(argv, emb, vocab_word, vocab_label)
-    decoder.load_model(argv)
-    dec_argv = decoder.argv
 
     ##############
     # Load files #
@@ -44,14 +40,14 @@ def main(argv):
     # Preprocessing #
     #################
     if argv.dev_data:
-        dev_samples = get_samples(dev_corpus, vocab_word, vocab_label, dec_argv.window)
+        dev_samples = get_samples(dev_corpus, vocab_word, vocab_label, config.window, test=True)
         n_dev_batches = len(dev_samples)
         print '\nDEV',
         sample_statistics(dev_samples, vocab_label)
         print '\tDev Mini-Batches: %d\n' % n_dev_batches
 
     if argv.test_data:
-        test_samples = get_samples(test_corpus, vocab_word, vocab_label, dec_argv.window)
+        test_samples = get_samples(test_corpus, vocab_word, vocab_label, config.window, test=True)
         n_test_batches = len(test_samples)
         print '\nTEST',
         sample_statistics(test_samples, vocab_label)
@@ -60,19 +56,26 @@ def main(argv):
     ###############
     # Set a model #
     ###############
-    say('\n\nBuilding a model...')
-    decoder.set_predict_f()
+    say('\n\nBuilding a model...\n')
+    model_api = ModelAPI(config, None, vocab_word, vocab_label)
+    model_api.set_model()
+    model_api.load_params(argv.load_params)
+    model_api.set_predict_f()
 
     ###########
     # Predict #
     ###########
     if argv.dev_data:
         print '\n  DEV\n\t',
-        dev_f1 = decoder.predict_all(dev_samples)
+        dev_f1 = model_api.predict_all(dev_samples)
         say('\n\n\tDEV F:{:.2%}\n'.format(dev_f1))
+        model_api.output_results('result.dev.intra.layers-%d.window-%d.reg-%f.txt' %
+                                 (config.layers, config.window, config.reg), dev_samples)
 
     if argv.test_data:
         print '\n  TEST\n\t',
-        test_f1 = decoder.predict_all(test_samples)
+        test_f1 = model_api.predict_all(test_samples)
         say('\n\n\tBEST TEST F:{:.2%}\n'.format(test_f1))
+        model_api.output_results('result.test.intra.layers-%d.window-%d.reg-%f.txt' %
+                                 (config.layers, config.window, config.reg), test_samples)
 

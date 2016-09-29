@@ -21,8 +21,9 @@ if __name__ == '__main__':
     # Model #
     #########
     parser.add_argument('--check', type=bool, default=False, help='check')
-    parser.add_argument('--save', type=bool, default=True, help='save model')
-    parser.add_argument('--load', type=str, default=None, help='load model')
+    parser.add_argument('--save', type=bool, default=False, help='save model')
+    parser.add_argument('--load_params', type=str, default=None, help='load trained parameters')
+    parser.add_argument('--load_config', type=str, default=None, help='load configuration')
 
     ########
     # Data #
@@ -57,7 +58,6 @@ if __name__ == '__main__':
     parser.add_argument('--lr', type=float, default=0.0075, help='learning rate')
     parser.add_argument('--reg', type=float, default=0.0001, help='learning rate')
     parser.add_argument('--init_emb', default=None, help='Initial embedding to be loaded')
-    parser.add_argument('--search', type=int, default=0, help='search mode')
 
     argv = parser.parse_args()
     print

@@ -3,7 +3,7 @@ import theano
 import theano.tensor as T
 
 from ..utils.io_utils import say
-from ..nn.rnn import GRU
+from ..nn.rnn import GRU, ConnectedLayer
 from ..nn.utils import L2_sqr
 from ..nn.optimizers import ada_grad, ada_delta, adam, sgd
 from ..nn.seq_labeling import Layer, MEMMLayer, CRFLayer
@@ -71,21 +71,21 @@ class Model(object):
         reg = argv.reg
         opt = argv.opt
         unit = argv.unit
-        search = argv.search
         n_layers = argv.layers
 
         ##############
         # Parameters #
         ##############
-        self.set_layers(unit, search, n_vocab, init_emb, dim_emb, dim_in, dim_h, dim_out, n_layers)
+        self.set_layers(unit, n_vocab, init_emb, dim_emb, dim_in, dim_h, dim_out, n_layers)
         self.set_params()
 
         ############
         # Networks #
         ############
         x = self.embedding_layer(x, batch_size, n_words)
-        x, h = self.mid_layers(x, batch_size, dim_h)
-        h = self.output_layer(x, h)
+        self.x = x
+        h = self.mid_layers(x, batch_size, dim_h)
+        h = self.output_layer(h)
 
         ###########
         # Outputs #
@@ -101,7 +101,7 @@ class Model(object):
         self.nll, self.cost = self.objective_f(self.p_y, reg)
         self.update = self.optimize(opt, self.cost, lr)
 
-    def set_layers(self, unit, search, n_vocab, init_emb, n_in, n_fin, n_h, n_y, n_layers):
+    def set_layers(self, unit, n_vocab, init_emb, n_in, n_fin, n_h, n_y, n_layers):
         ###################
         # Embedding layer #
         ###################
@@ -115,21 +115,20 @@ class Model(object):
 
         for i in xrange(n_layers):
             if i == 0:
-                self.layers.append(layer(n_i=n_fin, n_h=n_h))
-            else:
-                self.layers.append(layer(n_i=n_h*2, n_h=n_h))
+                self.layers.append(ConnectedLayer(n_i=n_fin, n_h=n_h))
+            self.layers.append(layer(n_i=n_h, n_h=n_h))
 
         #################
         # Output layers #
         #################
         if self.argv.output_layer == 0:
-            self.layers.append(Layer(n_i=n_h*2, n_labels=n_y))
+            self.layers.append(Layer(n_i=n_h, n_labels=n_y))
         elif self.argv.output_layer == 1:
-            self.layers.append(MEMMLayer(n_i=n_h*2, n_labels=n_y, search_mode=search))
+            self.layers.append(MEMMLayer(n_i=n_h, n_labels=n_y))
         else:
-            self.layers.append(CRFLayer(n_i=n_h*2, n_labels=n_y, search_mode=search))
+            self.layers.append(CRFLayer(n_i=n_h, n_labels=n_y))
 
-        say('No. of hidden layers: %d\n' % (len(self.layers)-2))
+        say('No. of rnn layers: %d\n' % (len(self.layers)-3))
 
     def set_params(self):
         for l in self.layers:
@@ -146,30 +145,30 @@ class Model(object):
     def mid_layers(self, x, batch, dim_h):
         """
         :param x: 1D: batch, 2D: n_words, 3D: dim_in (dim_emb * (5 + window + 1))
-        :return: x: 1D: n_words, 2D: batch, 3D: dim_h
-        :return: h: 1D: n_words, 2D: batch, 3D: dim_h
+        :return: 1D: n_words, 2D: batch, 3D: dim_h
         """
-        for i in xrange(len(self.layers)-2):
-            layer = self.layers[i+1]
+        for i in xrange(1, len(self.layers)-2):
             # h0: 1D: batch, 2D: n_h
-            if i == 0:
+            if i == 1:
+                layer = self.layers[i]
                 x = layer.dot(x.dimshuffle(1, 0, 2))
                 h0 = T.zeros((batch, dim_h), dtype=theano.config.floatX)
             else:
-                x = layer.dot(T.concatenate([x, h], 2))[::-1]
+                x = (h + x)[::-1]
                 h0 = x[0]
+            layer = self.layers[i+1]
             # 1D: n_words, 2D: batch, 3D n_h
             h = layer.forward_all(x, h0)
-        return x, h
+        return x + h
 
-    def output_layer(self, x, h):
+    def output_layer(self, x):
         """
         :param x: 1D: n_words, 2D: batch, 3D: dim_h
         :param h: 1D: n_words, 2D: batch, 3D: dim_h
         :return: 1D: n_words, 2D: batch, 3D: dim_h
         """
-        h = self.layers[-1].forward(x, h)
-        if (len(self.layers) - 2) % 2 == 0:
+        h = self.layers[-1].forward(x)
+        if (len(self.layers) - 3) % 2 == 0:
             h = h[::-1]
         return h
 

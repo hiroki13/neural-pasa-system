@@ -181,24 +181,28 @@ class ModelAPI(object):
 
                 print >> fout
 
-    def save_model(self, path):
+    def save_params(self, path):
         if not path.endswith(".pkl.gz"):
             path += ".gz" if path.endswith(".pkl") else ".pkl.gz"
-
         with gzip.open(path, "w") as fout:
-            pickle.dump(
-                {
-                    'argv': self.argv,
-                    'model': self.model,
-                },
-                fout,
-                protocol=pickle.HIGHEST_PROTOCOL)
+            pickle.dump([l.params for l in self.model.layers], fout,
+                        protocol=pickle.HIGHEST_PROTOCOL)
 
-    def load_model(self, argv):
-        with gzip.open(argv.load) as fin:
-            data = pickle.load(fin)
-            self.argv = data['argv']
-            self.model = data['model']
+    def save_config(self, path):
+        if not path.endswith(".pkl.gz"):
+            path += ".gz" if path.endswith(".pkl") else ".pkl.gz"
+        with gzip.open(path, "w") as fout:
+            pickle.dump(self.argv, fout,
+                        protocol=pickle.HIGHEST_PROTOCOL)
+
+    def load_params(self, path):
+        with gzip.open(path) as fin:
+            params = pickle.load(fin)
+            assert len(self.model.layers) == len(params)
+
+            for l, p in zip(self.model.layers, params):
+                for p1, p2 in zip(l.params, p):
+                    p1.set_value(p2.get_value(borrow=True))
 
 
 class MPModelAPI(ModelAPI):

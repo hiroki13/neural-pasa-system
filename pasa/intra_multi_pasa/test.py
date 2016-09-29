@@ -11,7 +11,7 @@ from utils.io_utils import load_data
 
 def main(argv):
     say('\nLoading...\n\n')
-    model = load_data(argv.load_model)
+    model = load_data(argv.load_params)
 
     if model.predict_all is None:
         model.set_predict_f()

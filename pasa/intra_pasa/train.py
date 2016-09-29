@@ -23,16 +23,14 @@ def get_corpus(argv):
     corpus_statistics(train_corpus)
 
     if argv.dev_data:
-        dev_corpus, word_freqs = io_utils.load_ntc(path=argv.dev_data, data_size=data_size, model='word',
-                                                   word_freqs=word_freqs)
+        dev_corpus, _ = io_utils.load_ntc(path=argv.dev_data, data_size=data_size, model='word')
         print '\nDEV',
         corpus_statistics(dev_corpus)
     else:
         dev_corpus = None
 
     if argv.test_data:
-        test_corpus, word_freqs = io_utils.load_ntc(path=argv.test_data, data_size=data_size, model='word',
-                                                    word_freqs=word_freqs)
+        test_corpus, _ = io_utils.load_ntc(path=argv.test_data, data_size=data_size, model='word')
         print '\nTEST',
         corpus_statistics(test_corpus)
     else:
@@ -51,9 +49,6 @@ def set_labels(argv):
 
 
 def set_vocab(argv, word_freqs):
-    #############
-    # Set vocab #
-    #############
     vocab_word = Vocab()
     vocab_word.set_init_word()
     vocab_word.add_vocab(word_freqs=word_freqs, vocab_cut_off=argv.vocab_cut_off)
@@ -163,10 +158,10 @@ def train(argv, model_api, train_batch_index, dev_samples, test_samples):
                 update = True
 
                 if argv.save:
-                    model_api.save_model('model.intra.layers-%d.window-%d.reg-%f' % (argv.layers, argv.window, argv.reg))
-                    model_api.output_results('result.dev.intra.layers-%d.window-%d.reg-%f.txt' %
-                                           (argv.layers, argv.window, argv.reg),
-                                           dev_samples)
+                    model_api.save_params('params.intra.layers-%d.window-%d.reg-%f' %
+                                          (argv.layers, argv.window, argv.reg))
+                    model_api.save_config('config.intra.layers-%d.window-%d.reg-%f' %
+                                          (argv.layers, argv.window, argv.reg))
 
         ########
         # Test #
@@ -175,9 +170,6 @@ def train(argv, model_api, train_batch_index, dev_samples, test_samples):
             print '\n  TEST\n\t',
             test_f1 = model_api.predict_all(test_samples)
             if update:
-                model_api.output_results('result.test.intra.layer-%d.window-%d.reg-%f.txt' %
-                                       (argv.layer, argv.window, argv.reg),
-                                       test_samples)
                 if epoch+1 in f1_history:
                     f1_history[epoch+1].append(test_f1)
                 else:
@@ -196,7 +188,7 @@ def train(argv, model_api, train_batch_index, dev_samples, test_samples):
 
 
 def main(argv):
-    say('\n\nSETTING UP AN INTRA-SENTENTIAL TRAINING SETTING\n')
+    say('\n\nSETTING UP AN INTRA-SENTENTIAL PASA TRAINING SETTING\n')
 
     train_corpus, dev_corpus, test_corpus, word_freqs = get_corpus(argv)
     vocab_label = set_labels(argv)
