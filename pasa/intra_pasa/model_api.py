@@ -1,13 +1,16 @@
 import sys
 import time
 import gzip
+import math
 import cPickle as pickle
 
+import numpy as np
 import theano
 import theano.tensor as T
 
 from model import Model
 from eval import Eval
+from ..utils.io_utils import say
 
 
 class ModelAPI(object):
@@ -81,6 +84,86 @@ class ModelAPI(object):
                                        outputs=model.y_pred,
                                        on_unused_input='ignore'
                                        )
+
+    def train_all(self, argv, train_batch_index, dev_samples, test_samples):
+        print '\nTRAINING START\n'
+
+        n_train_batches = len(train_batch_index)
+        tr_indices = range(n_train_batches)
+
+        f1_history = {}
+        best_dev_f1 = -1.
+
+        for epoch in xrange(argv.epoch):
+            dropout_p = np.float32(argv.dropout).astype(theano.config.floatX)
+            self.model.dropout.set_value(dropout_p)
+
+            print '\nEpoch: %d' % (epoch + 1)
+            print '  TRAIN\n\t',
+
+            self.train_each(tr_indices, train_batch_index)
+
+            ###############
+            # Development #
+            ###############
+            update = False
+            if argv.dev_data:
+                print '\n  DEV\n\t',
+                dev_f1 = self.predict_all(dev_samples)
+                if best_dev_f1 < dev_f1:
+                    best_dev_f1 = dev_f1
+                    f1_history[epoch+1] = [best_dev_f1]
+                    update = True
+
+                    if argv.save:
+                        self.save_params('params.intra.layers-%d.window-%d.reg-%f' %
+                                         (argv.layers, argv.window, argv.reg))
+                        self.save_config('config.intra.layers-%d.window-%d.reg-%f' %
+                                         (argv.layers, argv.window, argv.reg))
+
+            ########
+            # Test #
+            ########
+            if argv.test_data:
+                print '\n  TEST\n\t',
+                test_f1 = self.predict_all(test_samples)
+                if update:
+                    if epoch+1 in f1_history:
+                        f1_history[epoch+1].append(test_f1)
+                    else:
+                        f1_history[epoch+1] = [test_f1]
+
+            ###########
+            # Results #
+            ###########
+            say('\n\n\tF1 HISTORY')
+            for k, v in sorted(f1_history.items()):
+                if len(v) == 2:
+                    say('\n\tEPOCH-{:d}  \tBEST DEV F:{:.2%}\tBEST TEST F:{:.2%}'.format(k, v[0], v[1]))
+                else:
+                    say('\n\tEPOCH-{:d}  \tBEST DEV F:{:.2%}'.format(k, v[0]))
+            say('\n\n')
+
+    def train_each(self, tr_indices, train_batch_index):
+        np.random.shuffle(tr_indices)
+        train_eval = Eval()
+        start = time.time()
+
+        for index, b_index in enumerate(tr_indices):
+            if index != 0 and index % 1000 == 0:
+                print index,
+                sys.stdout.flush()
+
+            batch_range = train_batch_index[b_index]
+            result_sys, result_gold, nll = self.train(index=b_index, bos=batch_range[0], eos=batch_range[1])
+
+            assert not math.isnan(nll), 'NLL is NAN: Index: %d' % index
+
+            train_eval.update_results(result_sys, result_gold)
+            train_eval.nll += nll
+
+        print '\tTime: %f' % (time.time() - start)
+        train_eval.show_results()
 
     def predict_all(self, samples):
         """

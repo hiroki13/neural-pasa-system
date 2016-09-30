@@ -21,6 +21,6 @@ class EmbeddingLayer(object):
         self.E = T.concatenate([pad, self.emb], 0)
         self.params.append(self.emb)
 
-    def lookup(self, x):
+    def forward(self, x):
         return self.E[x]
 

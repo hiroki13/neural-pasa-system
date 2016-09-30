@@ -41,7 +41,7 @@ if __name__ == '__main__':
     ########################
     parser.add_argument('--unit', default='gru', help='unit')
     parser.add_argument('--layers',  type=int, default=1, help='number of layers')
-    parser.add_argument('--output_layer',  type=int, default=0, help='softmax/crf')
+    parser.add_argument('--output_layer',  type=int, default=0, help='softmax/memm/crf')
     parser.add_argument('--window', type=int, default=5, help='window size for convolution')
     parser.add_argument('--dim_emb',    type=int, default=32, help='dimension of embeddings')
     parser.add_argument('--dim_hidden', type=int, default=32, help='dimension of hidden layer')

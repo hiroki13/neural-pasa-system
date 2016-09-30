@@ -107,86 +107,6 @@ def set_model(argv, train_sample_shared, vocab_word, vocab_label):
     return model_api
 
 
-def train(argv, model_api, train_batch_index, dev_samples, test_samples):
-    print '\nTRAINING START\n'
-    n_train_batches = len(train_batch_index)
-    tr_indices = range(n_train_batches)
-
-    f1_history = {}
-    best_dev_f1 = -1.
-
-    for epoch in xrange(argv.epoch):
-        train_eval = Eval()
-        dropout_p = np.float32(argv.dropout).astype(theano.config.floatX)
-        model_api.model.dropout.set_value(dropout_p)
-
-        print '\nEpoch: %d' % (epoch + 1)
-        print '  TRAIN\n\t',
-
-        np.random.shuffle(tr_indices)
-        start = time.time()
-
-        ############
-        # Training #
-        ############
-        for index, b_index in enumerate(tr_indices):
-            if index != 0 and index % 1000 == 0:
-                print index,
-                sys.stdout.flush()
-
-            batch_range = train_batch_index[b_index]
-            result_sys, result_gold, nll = model_api.train(index=b_index, bos=batch_range[0], eos=batch_range[1])
-
-            assert not math.isnan(nll), 'NLL is NAN: Index: %d' % index
-
-            train_eval.update_results(result_sys, result_gold)
-            train_eval.nll += nll
-
-        print '\tTime: %f' % (time.time() - start)
-        train_eval.show_results()
-
-        ###############
-        # Development #
-        ###############
-        update = False
-        if argv.dev_data:
-            print '\n  DEV\n\t',
-            dev_f1 = model_api.predict_all(dev_samples)
-            if best_dev_f1 < dev_f1:
-                best_dev_f1 = dev_f1
-                f1_history[epoch+1] = [best_dev_f1]
-                update = True
-
-                if argv.save:
-                    model_api.save_params('params.intra.layers-%d.window-%d.reg-%f' %
-                                          (argv.layers, argv.window, argv.reg))
-                    model_api.save_config('config.intra.layers-%d.window-%d.reg-%f' %
-                                          (argv.layers, argv.window, argv.reg))
-
-        ########
-        # Test #
-        ########
-        if argv.test_data:
-            print '\n  TEST\n\t',
-            test_f1 = model_api.predict_all(test_samples)
-            if update:
-                if epoch+1 in f1_history:
-                    f1_history[epoch+1].append(test_f1)
-                else:
-                    f1_history[epoch+1] = [test_f1]
-
-        ###########
-        # Results #
-        ###########
-        say('\n\n\tF1 HISTORY')
-        for k, v in sorted(f1_history.items()):
-            if len(v) == 2:
-                say('\n\tEPOCH-{:d}  \tBEST DEV F:{:.2%}\tBEST TEST F:{:.2%}'.format(k, v[0], v[1]))
-            else:
-                say('\n\tEPOCH-{:d}  \tBEST DEV F:{:.2%}'.format(k, v[0]))
-        say('\n\n')
-
-
 def main(argv):
     say('\n\nSETTING UP AN INTRA-SENTENTIAL PASA TRAINING SETTING\n')
 
@@ -198,4 +118,4 @@ def main(argv):
     train_sample_shared, train_batch_index = create_shared_samples(argv, train_samples)
     model_api = set_model(argv, train_sample_shared, vocab_word, vocab_label)
 
-    train(argv, model_api, train_batch_index, dev_samples, test_samples)
+    model_api.train_all(argv, train_batch_index, dev_samples, test_samples)
