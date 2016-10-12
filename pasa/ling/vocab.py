@@ -1,3 +1,5 @@
+from collections import defaultdict
+
 PAD = u'<PAD>'
 UNK = u'<UNK>'
 MARK = u'<MARK>'
@@ -62,6 +64,23 @@ class Vocab(object):
             if freq == vocab_cut_off:
                 break
             self.add_word(w)
+
+    def add_vocab_from_corpus(self, corpus, min_unit='word', vocab_cut_off=0):
+        word_freqs = self.get_word_freqs(corpus, min_unit)
+        self.add_vocab(word_freqs, vocab_cut_off)
+
+    @staticmethod
+    def get_word_freqs(corpus, min_unit='word'):
+        word_freqs = defaultdict(int)
+        for doc in corpus:
+            for sent in doc:
+                for w in sent:
+                    if min_unit == 'word':
+                        word_freqs[w.form] += 1
+                    else:
+                        for c in w.chars:
+                            word_freqs[c] += 1
+        return word_freqs
 
     def size(self):
         return len(self.i2w)

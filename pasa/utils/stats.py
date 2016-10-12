@@ -1,9 +1,5 @@
 import numpy as np
 
-from ..utils import io_utils
-from ..ling.vocab import Vocab
-from ..intra_pasa.preprocessor import get_samples
-
 
 def show_case_dist(corpus):
     print '\nCASE DISTRIBUTION\n'
@@ -53,7 +49,10 @@ def show_case_dist(corpus):
 
 
 def corpus_statistics(corpus):
-    print '\nCORPUS STATISTICS\n'
+    if corpus is None:
+        return
+
+    print '\nCORPUS STATISTICS'
 
     """
     NAIST Ver. 1.5; DOC Train:1751, Dev:480, Test:696
@@ -80,7 +79,10 @@ def corpus_statistics(corpus):
 
 
 def sample_statistics(samples, vocab_label):
-    print '\nSAMPLE STATISTICS\n'
+    if samples is None:
+        return
+
+    print '\nSAMPLE STATISTICS'
 
     """
     The case distribution does not match with that of corpus_statistics(),
@@ -154,28 +156,3 @@ def check_samples(samples, vocab_word, vocab_label):
                 print vocab_label.get_word(label)
             print
     exit()
-
-
-def show_stats(argv):
-    print '\nDATASET STATISTICS\n'
-
-    """ Set labels """
-    vocab_label = Vocab()
-    vocab_label.set_pas_labels()
-    print '\nTARGET LABELS: %d\t%s\n' % (vocab_label.size(), str(vocab_label.w2i))
-
-    """ Load files """
-    # corpus: 1D: n_sents, 2D: n_words, 3D: (word, pas_info, pas_id)
-    corpus, vocab_word = io_utils.load_ntc(path=argv.data, data_size=argv.data_size)
-    samples = get_samples(corpus=corpus, vocab_word=vocab_word, vocab_label=vocab_label, window=argv.window)
-    print '\nVocab: %d\tType: word\n' % vocab_word.size()
-
-    """ Show stats """
-    corpus_statistics(corpus)
-    show_case_dist(corpus)
-    sample_statistics(samples[1], vocab_label)
-
-
-def main(argv):
-    show_stats(argv)
-

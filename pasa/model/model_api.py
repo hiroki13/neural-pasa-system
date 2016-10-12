@@ -9,8 +9,8 @@ import theano
 import theano.tensor as T
 
 from model import Model
-from eval import Eval
 from ..utils.io_utils import say
+from ..utils.eval import Eval
 
 
 class ModelAPI(object):
@@ -20,27 +20,30 @@ class ModelAPI(object):
         self.emb = emb
         self.vocab_word = vocab_word
         self.vocab_label = vocab_label
-        self.mp = True if argv.attention else False
 
         self.model = None
         self.train = None
         self.predict = None
 
+    def compile(self, train_sample_shared=None):
+        say('\n\nBuilding a model API...\n')
+        self.set_model()
+        self.compile_model()
+        self.set_train_f(train_sample_shared)
+        self.set_predict_f()
+
     def set_model(self):
+        self.model = Model(argv=self.argv,
+                           emb=self.emb,
+                           n_vocab=self.vocab_word.size(),
+                           n_labels=self.vocab_label.size())
+
+    def compile_model(self):
         # x: 1D: batch * n_words, 2D: 5 + window + 1; elem=word_id
         # y: 1D: batch * n_cands; elem=label
-        x = T.imatrix('x')
-        y = T.ivector('y')
-        n_words = T.iscalar('n_words')
-        n_prds = T.iscalar('n_prds')
-
-        self.model = Model(argv=self.argv, emb=self.emb,
-                           vocab_word=self.vocab_word, vocab_label=self.vocab_label)
-
-        if self.mp:
-            self.model.compile(x, y, n_words, n_prds)
-        else:
-            self.model.compile(x, y, n_words)
+        self.model.compile(x=T.imatrix('x'),
+                           y=T.ivector('y'),
+                           n_words=T.iscalar('n_words'))
 
     def set_train_f(self, samples):
         index = T.iscalar('index')
@@ -48,34 +51,14 @@ class ModelAPI(object):
         eos = T.iscalar('eos')
 
         model = self.model
-
-        if self.mp:
-            self.train = theano.function(inputs=[index, bos, eos],
-                                         outputs=[model.y_pred, model.y_gold, model.nll],
-                                         updates=model.update,
-                                         givens={
-                                             model.inputs[0]: samples[0][bos: eos],
-                                             model.inputs[1]: samples[1][bos: eos],
-                                             model.inputs[2]: samples[2][index],
-                                             model.inputs[3]: samples[3][index],
-                                         }
-                                         )
-        else:
-            self.train = theano.function(inputs=[index, bos, eos],
-                                         outputs=[model.y_pred, model.y_gold, model.nll],
-                                         updates=model.update,
-                                         givens={
-                                             model.inputs[0]: samples[0][bos: eos],
-                                             model.inputs[1]: samples[1][bos: eos],
-                                             model.inputs[2]: samples[2][index],
-                                         }
-                                         )
-
-    def set_train_online_f(self):
-        model = self.model
-        self.train = theano.function(inputs=model.inputs,
+        self.train = theano.function(inputs=[index, bos, eos],
                                      outputs=[model.y_pred, model.y_gold, model.nll],
                                      updates=model.update,
+                                     givens={
+                                         model.inputs[0]: samples[0][bos: eos],
+                                         model.inputs[1]: samples[1][bos: eos],
+                                         model.inputs[2]: samples[2][index],
+                                     }
                                      )
 
     def set_predict_f(self):
@@ -86,7 +69,7 @@ class ModelAPI(object):
                                        )
 
     def train_all(self, argv, train_batch_index, dev_samples, test_samples):
-        print '\nTRAINING START\n'
+        say('\n\nTRAINING START\n\n')
 
         n_train_batches = len(train_batch_index)
         tr_indices = range(n_train_batches)
@@ -98,7 +81,7 @@ class ModelAPI(object):
             dropout_p = np.float32(argv.dropout).astype(theano.config.floatX)
             self.model.dropout.set_value(dropout_p)
 
-            print '\nEpoch: %d' % (epoch + 1)
+            say('\nEpoch: %d\n' % (epoch + 1))
             print '  TRAIN\n\t',
 
             self.train_each(tr_indices, train_batch_index)
@@ -181,11 +164,7 @@ class ModelAPI(object):
             if sample.n_prds == 0:
                 continue
 
-            if self.mp:
-                results_sys = self.predict(sample.x, sample.y, sample.n_words, sample.n_prds)
-            else:
-                results_sys = self.predict(sample.x, sample.y, sample.n_words)
-
+            results_sys = self.predict(sample.x, sample.y, sample.n_words)
             pred_eval.update_results(results_sys, sample.label_ids)
 
         print '\tTime: %f' % (time.time() - start)
@@ -204,10 +183,7 @@ class ModelAPI(object):
                 results.append([])
                 continue
 
-            if self.mp:
-                results_sys = self.predict(sample.x, sample.y, sample.n_words, sample.n_prds)
-            else:
-                results_sys = self.predict(sample.x, sample.y, sample.n_words)
+            results_sys = self.predict(sample.x, sample.y, sample.n_words)
             results.append(results_sys)
 
         assert len(samples) == len(results)
@@ -286,91 +262,4 @@ class ModelAPI(object):
             for l, p in zip(self.model.layers, params):
                 for p1, p2 in zip(l.params, p):
                     p1.set_value(p2.get_value(borrow=True))
-
-
-class MPModelAPI(ModelAPI):
-
-    def __init__(self, argv, emb, vocab_word, vocab_label):
-        super(MPModelAPI, self).__init__(argv, emb, vocab_word, vocab_label)
-
-    def set_model(self):
-        argv = self.argv
-
-        ###################
-        # Input variables #
-        ###################
-        # x: 1D: batch * n_words, 2D: window + 1; elem=word_id
-        # y: 1D: batch * n_cands; elem=label
-        x = T.imatrix('x')
-        y = T.ivector('y')
-        n_words = T.iscalar('n_words')
-        n_prds = T.iscalar('n_prds')
-
-        ###################
-        # Hyperparameters #
-        ###################
-        dropout = argv.dropout
-        window = 5 + argv.window + 1
-        opt = argv.opt
-        lr = argv.lr
-        init_emb = self.emb
-        n_in = argv.dim_emb if self.emb is None else len(self.emb[0])
-        n_h = argv.dim_hidden
-        n_y = self.vocab_label.size()
-        n_vocab = self.vocab_word.size()
-        L2_reg = argv.reg
-        unit = argv.unit
-        n_layers = argv.layer
-
-        self.model = Model(x=x, y=y, n_words=n_words, n_prds=n_prds, n_vocab=n_vocab, init_emb=init_emb,
-                           n_in=n_in, n_h=n_h, n_y=n_y, window=window, unit=unit, opt=opt, lr=lr, dropout=dropout,
-                           L2_reg=L2_reg, n_layers=n_layers)
-
-    def set_train_f(self, samples):
-        index = T.iscalar('index')
-        bos = T.iscalar('bos')
-        eos = T.iscalar('eos')
-
-        model = self.model
-        self.train = theano.function(inputs=[index, bos, eos],
-                                     outputs=[model.y_pred, model.y_gold, model.nll],
-                                     updates=model.update,
-                                     givens={
-                                         model.inputs[0]: samples[0][bos: eos],
-                                         model.inputs[1]: samples[1][bos: eos],
-                                         model.inputs[2]: samples[2][index],
-                                         model.inputs[3]: samples[3][index],
-                                     }
-                                     )
-
-    def set_predict_f(self):
-        model = self.model
-        self.predict = theano.function(inputs=model.inputs,
-                                       outputs=model.y_pred,
-                                       on_unused_input='ignore'
-                                       )
-
-    def predict_all(self, samples):
-        """
-        :param samples: 1D: n_sents: Sample
-        """
-        pred_eval = Eval()
-        start = time.time()
-        self.model.dropout.set_value(0.0)
-
-        for index, sample in enumerate(samples):
-            if index != 0 and index % 1000 == 0:
-                print index,
-                sys.stdout.flush()
-
-            if sample.n_prds == 0:
-                continue
-
-            results_sys = self.predict(sample.x, sample.y, sample.n_words)
-            pred_eval.update_results(results_sys, sample.label_ids)
-
-        print '\tTime: %f' % (time.time() - start)
-        pred_eval.show_results()
-
-        return pred_eval.all_f1
 

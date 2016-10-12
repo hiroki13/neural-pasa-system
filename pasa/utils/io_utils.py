@@ -1,9 +1,8 @@
 import sys
 import gzip
 import cPickle
-from collections import defaultdict
 
-from ..ling.word import Word, Wordsrl
+from ..ling.word import Word
 
 
 def say(s, stream=sys.stdout):
@@ -11,81 +10,81 @@ def say(s, stream=sys.stdout):
     stream.flush()
 
 
-def load_ntc(path, data_size=1000000, model='word', word_freqs=defaultdict(int)):
-    corpus = []
-    flag = True
+class CorpusLoader(object):
 
-    with open(path) as f:
-        prev_doc_id = None
-        doc = []
-        sent = []
-        w_index = 0
+    def __init__(self, min_unit, data_size):
+        self.min_unit = min_unit
+        self.data_size = data_size
 
-        for line in f:
-            elem = line.rstrip().split()
+    def load_corpus(self, path):
+        if path is None:
+            return None
 
-            if line.startswith('*'):
-                chunk_index = int(elem[1])
-                chunk_head = int(elem[2][:-1])
-            elif line.startswith('#'):  # Doc starts
-                doc_id = line.split()[1].split(':')[1].split('-')[0]
-                if prev_doc_id and prev_doc_id != doc_id:
-                    prev_doc_id = doc_id
-                    corpus.append(doc)
-                    doc = []
+        BOD = '#'
+        BOC = '*'
+        EOS = 'EOS'
 
-                    if len(corpus) == data_size:
-                        flag = False
-                        break
-                elif prev_doc_id is None:
-                    prev_doc_id = doc_id
-            elif line.startswith('EOS'):  # Sent ends
-                for w in sent:
-                    w.set_cases(sent, doc)
-                doc.append(sent)
-                sent = []
-                w_index = 0
-            else:
-                w = Word(w_index, elem)
-                w.sent_index = len(doc)
-                w.chunk_index = chunk_index
-                w.chunk_head = chunk_head
+        corpus = []
+        with open(path) as f:
+            prev_doc_id = None
+            doc = []
+            sent = []
+            chunk_index = None
+            chunk_head = None
 
-                if model == 'word':
-                    word_freqs[w.form] += 1
+            for line in f:
+                elem = line.rstrip().split()
+
+                if line.startswith(BOD):  # Doc starts
+                    doc_id = self.get_doc_id(elem)
+
+                    if prev_doc_id and prev_doc_id != doc_id:
+                        prev_doc_id = doc_id
+                        corpus.append(doc)
+                        doc = []
+                    elif prev_doc_id is None:
+                        prev_doc_id = doc_id
+
+                elif line.startswith(BOC):
+                    chunk_index, chunk_head = self.get_chunk_info(elem)
+
+                elif line.startswith(EOS):
+                    for w in sent:
+                        w.set_cases(sent, doc)
+                    doc.append(sent)
+                    sent = []
+
                 else:
-                    for c in w.chars:
-                        word_freqs[c] += 1
+                    word = self.get_word(w_index=len(sent),
+                                         chunk_index=chunk_index,
+                                         chunk_head=chunk_head,
+                                         sent_index=len(doc),
+                                         elem=elem)
+                    sent.append(word)
 
-                sent.append(w)
-                w_index += 1
-
-        if doc and flag:
-            corpus.append(doc)
-
-    return corpus, word_freqs
-
-
-def load_conll(path, data_size=1000000, word_freqs=defaultdict(int)):
-    corpus = []
-
-    with open(path) as f:
-        sent = []
-
-        for line in f:
-            line = line.rstrip().split('\t')
-
-            if len(line) > 10:
-                w = Wordsrl(line)
-                word_freqs[w.form] += 1
-                sent.append(w)
-            else:
-                corpus.append(sent)
-                sent = []
-                if len(corpus) == data_size:
+                if len(corpus) == self.data_size:
                     break
+            else:
+                if doc:
+                    corpus.append(doc)
 
-    return corpus, word_freqs
+        return corpus
+
+    @staticmethod
+    def get_chunk_info(elem):
+        return int(elem[1]), int(elem[2][:-1])
+
+    @staticmethod
+    def get_doc_id(elem):
+        return elem[1].split(':')[1].split('-')[0]
+
+    @staticmethod
+    def get_word(w_index, chunk_index, chunk_head, sent_index, elem):
+        w = Word(w_index, elem)
+        w.sent_index = sent_index
+        w.chunk_index = chunk_index
+        w.chunk_head = chunk_head
+        return w
 
 
 def dump_data(data, fn):

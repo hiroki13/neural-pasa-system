@@ -122,7 +122,8 @@ class Wordsrl(object):
         self.is_prd = self.set_is_prd(elem[12])
         self.labels = self.set_labels(elem[14:])
 
-    def set_is_prd(self, prd):
+    @staticmethod
+    def set_is_prd(prd):
         if prd is 'Y':
             return True
         return False

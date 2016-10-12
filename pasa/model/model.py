@@ -12,12 +12,12 @@ from ..nn.embedding import EmbeddingLayer
 
 class Model(object):
 
-    def __init__(self, argv, emb, vocab_word, vocab_label):
+    def __init__(self, argv, emb, n_vocab, n_labels):
 
         self.argv = argv
         self.emb = emb
-        self.n_vocab = vocab_word.size()
-        self.n_labels = vocab_label.size()
+        self.n_vocab = n_vocab
+        self.n_labels = n_labels
         self.dropout = None
 
         ###################
