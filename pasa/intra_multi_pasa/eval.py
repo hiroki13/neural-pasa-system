@@ -1,5 +1,5 @@
 import numpy as np
-from utils.io_utils import say
+from nn_utils.io_utils import say
 
 GA_ID = 1
 O_ID = 2

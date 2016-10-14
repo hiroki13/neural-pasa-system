@@ -3,8 +3,8 @@ import time
 import math
 import numpy as np
 
-from utils import io_utils
-from utils.io_utils import dump_data, say
+from nn_utils import io_utils
+from nn_utils.io_utils import dump_data, say
 from ling.vocab import Vocab
 from preprocessor import get_samples, theano_format
 from stats.stats import corpus_statistics, sample_statistics, check_samples

@@ -1,26 +1,133 @@
+import numpy as np
+import theano
+
 from ..utils.io_utils import say
 from ..utils.preprocessor import Experimenter
+from ..ling.vocab import Vocab, PAD, UNK
 from ..model.model_api import ModelAPI
 
 
+class Trainer(Experimenter):
+
+    def __init__(self, argv):
+        super(Trainer, self).__init__(argv)
+
+        self.vocab_word = None
+        self.vocab_label = None
+        self.trainable_emb = None
+        self.untrainable_emb = None
+
+        self.corpus_set = None
+        self.train_samples = None
+        self.dev_samples = None
+        self.test_samples = None
+        self.train_indices = None
+
+    def setup_training(self):
+        say('\n\nSETTING UP AN INTRA-SENTENTIAL PASA TRAINING SETTING\n')
+        self._setup_corpus()
+        self._setup_vocab_word()
+        self._setup_label()
+        self._setup_samples()
+
+    def _setup_corpus(self):
+        self.select_corpus_loader()
+        self.corpus_set = self.load_corpus_set()
+        self.show_corpus_stats(self.corpus_set)
+
+    def _setup_vocab_word(self):
+        vocab_word, emb = self.load_init_emb()
+
+        if emb is None:
+            vocab_word = self.create_vocab_word(self.corpus_set[0])
+        elif emb is not None and self.argv.fix == 0:
+            vocab_word, emb, untrainable_emb = self._divide_emb(self.corpus_set[0], vocab_word, emb)
+            self.untrainable_emb = untrainable_emb
+
+        self.vocab_word = vocab_word
+        self.trainable_emb = emb
+
+    def _divide_emb(self, corpus, vocab_emb_word, emb):
+        say('\nDivide the embeddings into the trainable/untrainable embeddings\n')
+
+        vocab_trainable_word = self._get_common_vocab(corpus, vocab_emb_word)
+        vocab_trainable_word.add_word(UNK)
+        vocab_untrainable_word = Vocab()
+        trainable_emb = [[] for i in xrange(vocab_trainable_word.size())]
+        untrainable_emb = []
+
+        for w, w_id in vocab_emb_word.w2i.items():
+            if w == PAD:
+                continue
+            if vocab_trainable_word.has_key(w):
+                trainable_emb[vocab_trainable_word.get_id(w)] = emb[w_id]
+            else:
+                untrainable_emb.append(emb[w_id])
+                vocab_untrainable_word.add_word(w)
+
+        vocab_word = self._unite_vocab_word(vocab_trainable_word, vocab_untrainable_word)
+        trainable_emb = np.asarray(trainable_emb, theano.config.floatX)
+        untrainable_emb = np.asarray(untrainable_emb, theano.config.floatX)
+
+        say('\tTrainable emb: %d  Untrainable emb: %d\n' % (trainable_emb.shape[0], untrainable_emb.shape[0]))
+        say('Vocab size: %d  Trainable: %d  Untrainable: %d' % (vocab_word.size(),
+                                                                vocab_trainable_word.size(),
+                                                                vocab_untrainable_word.size()))
+        assert vocab_word.size() == (trainable_emb.shape[0] + untrainable_emb.shape[0] + 1)
+
+        return vocab_word, trainable_emb, untrainable_emb
+
+    @staticmethod
+    def _get_common_vocab(corpus, vocab_emb_word):
+        vocab_word = Vocab()
+        for doc in corpus:
+            for sent in doc:
+                for w in sent:
+                    if vocab_emb_word.has_key(w.form):
+                        vocab_word.add_word(w.form)
+        return vocab_word
+
+    @staticmethod
+    def _unite_vocab_word(vocab_word_1, vocab_word_2):
+        vocab_word = Vocab()
+        vocab_word.set_init_word()
+        for w in vocab_word_1.i2w:
+            vocab_word.add_word(w)
+        for w in vocab_word_2.i2w:
+            vocab_word.add_word(w)
+        return vocab_word
+
+    def _setup_label(self):
+        self.vocab_label = self.create_vocab_label()
+
+    def _setup_samples(self):
+        self.select_preprocessor(self.vocab_word, self.vocab_label)
+        sample_set = self.create_sample_set(self.corpus_set)
+        train_sample_shared, train_batch_index = self.create_shared_samples(sample_set[0])
+        self.show_sample_stats(sample_set, self.vocab_label)
+
+        self.train_samples = train_sample_shared
+        self.dev_samples = sample_set[1]
+        self.test_samples = sample_set[2]
+        self.train_indices = train_batch_index
+
+    def train_model(self):
+        say('\n\nTRAINING A MODEL\n')
+        model_api = ModelAPI(argv=self.argv,
+                             emb=self.trainable_emb,
+                             vocab_word=self.vocab_word,
+                             vocab_label=self.vocab_label)
+
+        model_api.compile(train_sample_shared=self.train_samples)
+
+        model_api.train_all(argv=self.argv,
+                            train_batch_index=self.train_indices,
+                            dev_samples=self.dev_samples,
+                            test_samples=self.test_samples,
+                            untrainable_emb=self.untrainable_emb)
+
+
 def main(argv):
-    say('\n\nSETTING UP AN INTRA-SENTENTIAL PASA TRAINING SETTING\n')
-
-    experimenter = Experimenter(argv)
-
-    experimenter.select_corpus_loader()
-    corpus_set = experimenter.load_corpus_set()
-    experimenter.show_corpus_stats(corpus_set)
-
-    vocab_label = experimenter.create_vocab_label()
-    vocab_word = experimenter.create_vocab_word(corpus_set[0])
-
-    experimenter.select_preprocessor(vocab_word, vocab_label)
-    sample_set = experimenter.create_sample_set(corpus_set)
-    train_samples, dev_samples, test_samples = sample_set
-    train_sample_shared, train_batch_index = experimenter.create_shared_samples(train_samples)
-    experimenter.show_sample_stats(sample_set, vocab_label)
-
-    model_api = ModelAPI(argv=argv, emb=None, vocab_word=vocab_word, vocab_label=vocab_label)
-    model_api.compile(train_sample_shared)
-    model_api.train_all(argv, train_batch_index, dev_samples, test_samples)
+    trainer = Trainer(argv)
+    trainer.setup_training()
+    trainer.train_model()

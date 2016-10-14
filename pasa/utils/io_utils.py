@@ -2,7 +2,11 @@ import sys
 import gzip
 import cPickle
 
+import numpy as np
+import theano
+
 from ..ling.word import Word
+from ..ling.vocab import Vocab, PAD, UNK
 
 
 def say(s, stream=sys.stdout):
@@ -85,6 +89,42 @@ class CorpusLoader(object):
         w.chunk_index = chunk_index
         w.chunk_head = chunk_head
         return w
+
+
+def load_init_emb(fn, dim_emb):
+    """
+    :param fn: each line: e.g., [the 0.418 0.24968 -0.41242 ...]
+    """
+    vocab_word = Vocab()
+
+    if fn is None:
+        say('\nRandom Initialized Word Embeddings')
+        return vocab_word, None
+
+    say('\nLoad Initial Word Embedding...')
+    emb = []
+    with open(fn) as lines:
+        for line in lines:
+            line = line.strip().decode('utf-8').split()
+            if len(line[1:]) != dim_emb or vocab_word.has_key(line[0]):
+                continue
+            vocab_word.add_word(line[0])
+            emb.append(line[1:])
+
+    emb = set_unk(vocab_word, emb)
+    emb = np.asarray(emb, dtype=theano.config.floatX)
+    vocab_word.add_word(UNK)
+
+    assert emb.shape[0] == vocab_word.size(), 'emb: %d  vocab: %d' % (emb.shape[0], vocab_word.size())
+    return vocab_word, emb
+
+
+def set_unk(vocab_word, emb):
+    if vocab_word.has_key(UNK):
+        return emb
+    unk = list(np.mean(np.asarray(emb, dtype=theano.config.floatX), 0))
+    emb.append(unk)
+    return emb
 
 
 def dump_data(data, fn):

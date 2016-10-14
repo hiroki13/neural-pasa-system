@@ -1,7 +1,7 @@
 import theano
 import theano.tensor as T
 
-from utils import logsumexp, logsumexp_3d, sample_weights, relu
+from nn_utils import logsumexp, logsumexp_3d, sample_weights, relu
 
 
 def get_path_prob_memm(h, y, W_trans):

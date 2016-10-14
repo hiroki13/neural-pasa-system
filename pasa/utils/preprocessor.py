@@ -1,9 +1,9 @@
 import numpy as np
 import theano
 
-from ..ling.vocab import Vocab
+from ..ling.vocab import Vocab, UNK
 from ..ling.sample import Sample
-from io_utils import CorpusLoader, say, dump_data, load_data
+from io_utils import CorpusLoader, say, dump_data, load_data, load_init_emb
 from stats import corpus_statistics, sample_statistics
 
 
@@ -50,7 +50,8 @@ class Preprocessor(object):
         batch_size = self.batch_size
         mp = self.mp
 
-        theano_x = []
+        theano_x_w = []
+        theano_x_p = []
         theano_y = []
         sent_length = []
         num_prds = []
@@ -77,9 +78,10 @@ class Preprocessor(object):
                 prev_n_prds = n_prds
                 prev_n_words = n_words
 
-            theano_x.extend(sample.x)
+            theano_x_w.extend(sample.x_w)
+            theano_x_p.extend(sample.x_p)
             theano_y.extend(sample.y)
-            index += len(sample.x)
+            index += len(sample.x_w)
 
         if index > prev_index:
             batch_index.append((prev_index, index))
@@ -87,7 +89,7 @@ class Preprocessor(object):
             sent_length.append(prev_n_words)
 
         assert len(batch_index) == len(sent_length) == len(num_prds)
-        return [shared(theano_x), shared(theano_y), shared(sent_length), shared(num_prds)], batch_index
+        return [shared(theano_x_w), shared(theano_x_p), shared(theano_y), shared(sent_length), shared(num_prds)], batch_index
 
 
 class Experimenter(object):
@@ -137,6 +139,7 @@ class Experimenter(object):
         vocab_word = Vocab()
         vocab_word.set_init_word()
         vocab_word.add_vocab_from_corpus(corpus=corpus, vocab_cut_off=self.argv.vocab_cut_off)
+        vocab_word.add_word(UNK)
         if self.argv.save:
             dump_data(vocab_word, 'vocab_word.cut-%d' % self.argv.vocab_cut_off)
         say('\nVocab: %d\tType: word\n' % vocab_word.size())
@@ -157,6 +160,11 @@ class Experimenter(object):
         vocab_word = load_data(self.argv.word)
         say('\nVocab: %d\tType: word\n' % vocab_word.size())
         return vocab_word
+
+    def load_init_emb(self):
+        vocab_word, emb = load_init_emb(self.argv.init_emb, self.argv.dim_emb)
+        say('\n\tWord Embedding Size: %d\n' % vocab_word.size())
+        return vocab_word, emb
 
     @staticmethod
     def show_corpus_stats(corpora):

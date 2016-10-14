@@ -41,7 +41,8 @@ class ModelAPI(object):
     def compile_model(self):
         # x: 1D: batch * n_words, 2D: 5 + window + 1; elem=word_id
         # y: 1D: batch * n_cands; elem=label
-        self.model.compile(x=T.imatrix('x'),
+        self.model.compile(x_w=T.imatrix('x_w'),
+                           x_p=T.ivector('x_p'),
                            y=T.ivector('y'),
                            n_words=T.iscalar('n_words'))
 
@@ -57,7 +58,8 @@ class ModelAPI(object):
                                      givens={
                                          model.inputs[0]: samples[0][bos: eos],
                                          model.inputs[1]: samples[1][bos: eos],
-                                         model.inputs[2]: samples[2][index],
+                                         model.inputs[2]: samples[2][bos: eos],
+                                         model.inputs[3]: samples[3][index],
                                      }
                                      )
 
@@ -68,7 +70,7 @@ class ModelAPI(object):
                                        on_unused_input='ignore'
                                        )
 
-    def train_all(self, argv, train_batch_index, dev_samples, test_samples):
+    def train_all(self, argv, train_batch_index, dev_samples, test_samples, untrainable_emb=None):
         say('\n\nTRAINING START\n\n')
 
         n_train_batches = len(train_batch_index)
@@ -89,6 +91,10 @@ class ModelAPI(object):
             ###############
             # Development #
             ###############
+            if untrainable_emb is not None:
+                trainable_emb = self.model.emb_layer.word_emb.get_value(True)
+                self.model.emb_layer.word_emb.set_value(np.r_[trainable_emb, untrainable_emb])
+
             update = False
             if argv.dev_data:
                 print '\n  DEV\n\t',
@@ -115,6 +121,9 @@ class ModelAPI(object):
                         f1_history[epoch+1].append(test_f1)
                     else:
                         f1_history[epoch+1] = [test_f1]
+
+            if untrainable_emb is not None:
+                self.model.emb_layer.word_emb.set_value(trainable_emb)
 
             ###########
             # Results #
@@ -164,7 +173,7 @@ class ModelAPI(object):
             if sample.n_prds == 0:
                 continue
 
-            results_sys = self.predict(sample.x, sample.y, sample.n_words)
+            results_sys = self.predict(sample.x_w, sample.x_p, sample.y, sample.n_words)
             pred_eval.update_results(results_sys, sample.label_ids)
 
         print '\tTime: %f' % (time.time() - start)
@@ -183,7 +192,7 @@ class ModelAPI(object):
                 results.append([])
                 continue
 
-            results_sys = self.predict(sample.x, sample.y, sample.n_words)
+            results_sys = self.predict(sample.x_w, sample.x_p, sample.y, sample.n_words)
             results.append(results_sys)
 
         assert len(samples) == len(results)

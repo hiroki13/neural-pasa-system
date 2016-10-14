@@ -4,7 +4,7 @@ import numpy as np
 import theano
 import theano.tensor as T
 
-from utils import build_shared_zeros
+from nn_utils import build_shared_zeros
 
 
 def grad_clipping(g, s):

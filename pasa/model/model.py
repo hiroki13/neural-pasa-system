@@ -4,7 +4,7 @@ import theano.tensor as T
 
 from ..utils.io_utils import say
 from ..nn.rnn import RNNLayers
-from ..nn.utils import L2_sqr
+from ..nn.nn_utils import L2_sqr
 from ..nn.optimizers import ada_grad, ada_delta, adam, sgd
 from ..nn.seq_labeling import Layer, MEMMLayer, CRFLayer
 from ..nn.embedding import EmbeddingLayer
@@ -44,7 +44,7 @@ class Model(object):
         self.params = []
         self.update = None
 
-    def compile(self, x, y, n_words, n_prds=None):
+    def compile(self, x_w, x_p, y, n_words, n_prds=None):
         argv = self.argv
         init_emb = self.emb
 
@@ -52,16 +52,17 @@ class Model(object):
         # Input variables #
         ###################
         if n_prds:
-            self.inputs = [x, y, n_words, n_prds]
+            self.inputs = [x_w, x_p, y, n_words, n_prds]
         else:
-            self.inputs = [x, y, n_words]
+            self.inputs = [x_w, x_p, y, n_words]
 
         ##############
         # Dimensions #
         ##############
-        batch_size = x.shape[0] / n_words
+        batch_size = x_w.shape[0] / n_words
         dim_emb = argv.dim_emb if init_emb is None else len(init_emb[0])
-        dim_in = dim_emb * (5 + argv.window + 1)
+        dim_posit = argv.dim_posit
+        dim_in = dim_emb * (5 + argv.window) + dim_posit
         dim_h = argv.dim_hidden
         dim_out = self.n_labels
         n_vocab = self.n_vocab
@@ -74,18 +75,19 @@ class Model(object):
         reg = argv.reg
         opt = argv.opt
         unit = argv.unit
+        fix = argv.fix
         n_layers = argv.layers
 
         ##############
         # Parameters #
         ##############
-        self.set_layers(unit, n_vocab, init_emb, dim_emb, dim_in, dim_h, dim_out, n_layers)
+        self.set_layers(unit, n_vocab, init_emb, fix, dim_emb, dim_posit, dim_in, dim_h, dim_out, n_layers)
         self.set_params()
 
         ############
         # Networks #
         ############
-        x = self.emb_layer_forward(x, batch_size, n_words)
+        x = self.emb_layer_forward(x_w, x_p, batch_size, n_words)
         h = self.hidden_layer_forward(x)
         h = self.output_layer_forward(h)
 
@@ -102,8 +104,8 @@ class Model(object):
         self.nll, self.cost = self.objective_f(self.p_y, reg)
         self.update = self.optimize(opt, self.cost, lr)
 
-    def set_layers(self, unit, n_vocab, init_emb, n_emb, n_in, n_h, n_y, n_layers):
-        self.emb_layer = EmbeddingLayer(n_vocab=n_vocab, dim_emb=n_emb, init_emb=init_emb)
+    def set_layers(self, unit, n_vocab, init_emb, fix, n_emb, n_posit, n_in, n_h, n_y, n_layers):
+        self.emb_layer = EmbeddingLayer(n_vocab=n_vocab, dim_emb=n_emb, init_emb=init_emb, dim_posit=n_posit, fix=fix)
         self.hidden_layers = RNNLayers(unit=unit, depth=n_layers, n_in=n_in, n_h=n_h)
 
         if self.argv.output_layer == 0:
@@ -116,7 +118,6 @@ class Model(object):
         self.layers.append(self.emb_layer)
         self.layers.extend(self.hidden_layers.layers)
         self.layers.append(self.output_layer)
-
         say('No. of rnn layers: %d\n' % (len(self.layers)-3))
 
     def set_params(self):
@@ -124,12 +125,15 @@ class Model(object):
             self.params += l.params
         say("No. of parameters: {}\n".format(sum(len(x.get_value(borrow=True).ravel()) for x in self.params)))
 
-    def emb_layer_forward(self, x, batch, n_words):
+    def emb_layer_forward(self, x_w, x_p, batch, n_words):
         """
-        :param x: 1D: batch * n_words, 2D: 5 + window + 1; elem=word_id
+        :param x_w: 1D: batch * n_words, 2D: 5 + window; elem=word_id
+        :param x_p: 1D: batch * n_words; elem=posit_id
         :return: 1D: batch, 2D: n_words, 3D: dim_in (dim_emb * (5 + window + 1))
         """
-        return self.emb_layer.forward(x).reshape((batch, n_words, -1))
+        x_w = self.emb_layer.forward_word(x_w).reshape((batch, n_words, -1))
+        x_p = self.emb_layer.forward_posit(x_p).reshape((batch, n_words, -1))
+        return T.concatenate([x_w, x_p], axis=2)
 
     def hidden_layer_forward(self, x):
         """

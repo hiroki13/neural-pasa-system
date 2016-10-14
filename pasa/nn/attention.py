@@ -1,6 +1,6 @@
 import theano
 import theano.tensor as T
-from utils import sample_weights
+from nn_utils import sample_weights
 
 
 class AttentionLayer(object):

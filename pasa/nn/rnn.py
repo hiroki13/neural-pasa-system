@@ -1,7 +1,7 @@
 import theano
 import theano.tensor as T
 
-from utils import sigmoid, tanh, relu, sample_weights, apply_dropout
+from nn_utils import sigmoid, tanh, relu, sample_weights, apply_dropout
 
 
 class ConnectedLayer(object):

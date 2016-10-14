@@ -1,4 +1,4 @@
-from nn.utils import sample_weights, build_shared_zeros, L2_sqr
+from nn.nn_utils import sample_weights, build_shared_zeros, L2_sqr
 from nn.optimizers import ada_grad, ada_delta, adam, sgd
 from nn import rnn, lstm
 from nn.seq_labeling import y_prob, vitabi

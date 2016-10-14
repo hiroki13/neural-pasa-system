@@ -15,7 +15,8 @@ class Sample(object):
         self.sent = sent
         self.word_ids = []
         self.label_ids = []
-        self.phi = []
+        self.word_phi = []
+        self.posit_phi = []
         self.prd_indices = []
 
         self.n_words = len(sent)
@@ -23,14 +24,16 @@ class Sample(object):
         self.window = window
         self.slide = window / 2
 
-        self.x = []
+        self.x_w = []
+        self.x_p = []
         self.y = []
 
     def set_params(self, vocab_word, vocab_label):
         self.set_word_ids(vocab_word)
         self.set_label_ids(vocab_label)
-        self.set_phi()
-        self.set_x_y()
+        word_phi = self.get_word_phi()
+        posit_phi = self.get_posit_phi()
+        self.set_x_y(word_phi, posit_phi)
 
     def set_word_ids(self, vocab_word):
         word_ids = []
@@ -73,7 +76,7 @@ class Sample(object):
         self.prd_indices = prd_indices
         self.n_prds = len(prd_indices)
 
-    def set_phi(self):
+    def get_word_phi(self):
         phi = []
 
         ###################
@@ -99,27 +102,43 @@ class Sample(object):
 
             for arg_index in xrange(sent_len):
                 arg_ctx = a_sent_w_ids[arg_index: arg_index + window] + prd_ctx
-                arg_ctx.append(self.get_mark(prd_index, arg_index))
                 p_phi.append(arg_ctx)
             phi.append(p_phi)
 
         assert len(phi) == len(self.prd_indices)
+        return phi
 
-        self.phi = phi
+    def get_posit_phi(self):
+        phi = []
+
+        sent_len = len(self.word_ids)
+        for prd_index in self.prd_indices:
+            p_phi = [self.get_mark(prd_index, arg_index) for arg_index in xrange(sent_len)]
+            phi.append(p_phi)
+
+        assert len(phi) == len(self.prd_indices)
+        return phi
 
     def get_mark(self, prd_index, arg_index):
         slide = self.slide
         if prd_index - slide <= arg_index <= prd_index + slide:
-            return 1
-        return 2
+            return 0
+        return 1
 
-    def set_x_y(self):
-        x = []
+    def set_x_y(self, word_phi, posit_phi):
+        x_w = []
+        x_p = []
         y = []
-        for sent_phi, sent_label in zip(self.phi, self.label_ids):
-            x += sent_phi
+
+        assert len(word_phi) == len(posit_phi)
+        for sent_w_phi, sent_p_phi, sent_label in zip(word_phi, posit_phi, self.label_ids):
+            assert len(sent_w_phi) == len(sent_p_phi)
+            x_w += sent_w_phi
+            x_p += sent_p_phi
             y += sent_label
-        self.x = numpize(x)
+
+        self.x_w = numpize(x_w)
+        self.x_p = numpize(x_p)
         self.y = numpize(y)
 
 

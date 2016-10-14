@@ -1,12 +1,12 @@
 import sys
 import time
 
-from utils import io_utils
-from utils.io_utils import say
+from nn_utils import io_utils
+from nn_utils.io_utils import say
 from preprocessor import get_samples, theano_format_online
 from stats.stats import corpus_statistics, sample_statistics
 from eval import Eval
-from utils.io_utils import load_data
+from nn_utils.io_utils import load_data
 
 
 def main(argv):

@@ -1,9 +1,9 @@
 from collections import defaultdict
 
-PAD = u'<PAD>'
-UNK = u'<UNK>'
-MARK = u'<MARK>'
-NMARK = u'<NMARK>'
+PAD = u'PAD'
+UNK = u'UNKNOWN'
+MARK = u'MARK'
+NMARK = u'NMARK'
 
 NA = u'NA'
 GA = u'Ga'
@@ -28,6 +28,9 @@ class Vocab(object):
             self.i2w.append(word)
             self.w2i[word] = new_id
 
+    def has_key(self, word):
+        return self.w2i.has_key(word)
+
     def get_id(self, word):
         return self.w2i.get(word)
 
@@ -36,9 +39,6 @@ class Vocab(object):
 
     def set_init_word(self):
         self.add_word(PAD)
-        self.add_word(MARK)
-        self.add_word(NMARK)
-        self.add_word(UNK)
 
     def set_pas_labels(self):
         self.add_word(NA)

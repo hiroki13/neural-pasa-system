@@ -1,4 +1,4 @@
-from utils import sample_weights, tanh, relu
+from nn_utils import sample_weights, tanh, relu
 
 import theano
 import theano.tensor as T
