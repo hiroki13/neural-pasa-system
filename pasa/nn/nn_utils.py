@@ -86,6 +86,16 @@ def normalize_3d(x, eps=1e-8):
     return x / (l2 + eps)
 
 
+def hinge_loss(pos_scores, neg_scores):
+    """
+    :param pos_scores: 1D: batch, 2D: n_labels
+    :param neg_scores: 1D: batch, 2D: n_labels
+    :return: avg hinge_loss: float
+    """
+    loss = 1.0 + neg_scores - pos_scores
+    return T.mean((loss > 0) * loss)
+
+
 class Dropout(object):
     def __init__(self, dropout_prob, srng=None, v2=False):
         """

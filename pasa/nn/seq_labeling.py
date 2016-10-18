@@ -207,7 +207,8 @@ class Layer(object):
         h_reshaped = h.reshape((h.shape[0] * h.shape[1], h.shape[2]))
         return T.log(T.nnet.softmax(h_reshaped).reshape((h.shape[0], h.shape[1], -1)))
 
-    def get_y_prob(self, h, y):
+    @staticmethod
+    def get_y_prob(h, y):
         """
         :param h: 1D: n_words * batch, 2D: n_labels
         :param y: 1D: n_words, 2D: batch
@@ -216,12 +217,49 @@ class Layer(object):
         emit_scores = get_emit_score(h, y)
         return T.sum(emit_scores, axis=0)
 
-    def decode(self, h):
+    @staticmethod
+    def decode(h):
         """
         :param h: 1D: n_words * batch, 2D: n_labels; log probability of a label
         :return: 1D: batch, 2D: n_words; the highest scoring sequence (label id)
         """
         return T.argmax(h, axis=2).dimshuffle(1, 0)
+
+
+class RankingLayer(Layer):
+
+    def __init__(self, n_i, n_labels):
+        super(RankingLayer, self).__init__(n_i, n_labels)
+
+    @staticmethod
+    def get_y_scores(h, y):
+        """
+        :param h: 1D: n_words, 2D: batch, 3D: n_labels; score of a label
+        :param y: 1D: batch, 2D: n_labels; word index
+        :return: 1D: batch, 2D: n_labels; the highest scores
+        """
+        # 1D: batch, 2D: n_labels, 3D: n_words
+        h = h.dimshuffle(1, 2, 0)
+        # 1D: batch * n_labels, 2D: n_words
+        h_reshaped = h.reshape((h.shape[0] * h.shape[1], -1))
+        # 1D: batch, 2D: n_labels
+        return h_reshaped[y.ravel()].reshape((h.shape[0], h.shape[1]))
+
+    @staticmethod
+    def get_y_hat_scores(h):
+        """
+        :param h: 1D: n_words, 2D: batch, 3D: n_labels; score of a label
+        :return: 1D: batch, 2D: n_labels; the highest scores
+        """
+        return T.max(h, axis=0)
+
+    @staticmethod
+    def decode(h):
+        """
+        :param h: 1D: n_words, 2D: batch, 3D: n_labels; score of a label
+        :return: 1D: batch, 2D: n_labels; the highest scoring argument index
+        """
+        return T.argmax(h, axis=0)
 
 
 class MEMMLayer(object):

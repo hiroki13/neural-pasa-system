@@ -1,12 +1,12 @@
 from ..utils.io_utils import say
-from ..utils.preprocessor import Experimenter
+from ..utils.preprocessor import Preprocessor
 from ..model.model_api import ModelAPI
 
 
 def main(argv):
     say('\n\nSETTING UP AN INTRA-SENTENTIAL PASA TEST SETTING\n')
 
-    experimenter = Experimenter(argv)
+    experimenter = Preprocessor(argv)
 
     config = experimenter.load_config()
     vocab_label = experimenter.load_labels()

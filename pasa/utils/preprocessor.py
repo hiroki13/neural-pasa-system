@@ -1,113 +1,24 @@
-import numpy as np
-import theano
-
 from ..ling.vocab import Vocab, UNK
-from ..ling.sample import Sample
+from ..utils.sample_factory import BasicSampleFactory, RankingSampleFactory
 from io_utils import CorpusLoader, say, dump_data, load_data, load_init_emb
 from stats import corpus_statistics, sample_statistics
 
 
 class Preprocessor(object):
 
-    def __init__(self, vocab_word, vocab_label, batch_size, window, mp):
-        self.vocab_word = vocab_word
-        self.vocab_label = vocab_label
-        self.batch_size = batch_size
-        self.window = window
-        self.mp = mp
-
-    def create_samples(self, corpus, test=False):
-        """
-        :param corpus: 1D: n_docs, 2D: n_sents, 3D: n_words; elem=Word
-        :return: samples: 1D: n_samples; Sample
-        """
-        if corpus is None:
-            return None
-
-        # 1D: n_docs * n_sents, 2D: n_words; elem=Word
-        corpus = [sent for doc in corpus for sent in doc]
-
-        if test is False:
-            np.random.shuffle(corpus)
-            corpus.sort(key=lambda s: len(s))
-
-        samples = []
-        for sent in corpus:
-            sample = Sample(sent=sent, window=self.window)
-            sample.set_params(self.vocab_word, self.vocab_label)
-            samples.append(sample)
-
-        return samples
-
-    def get_shared_samples(self, samples):
-        """
-        :param samples: 1D: n_sents; Sample
-        """
-
-        def shared(_sample):
-            return theano.shared(np.asarray(_sample, dtype='int32'), borrow=True)
-
-        batch_size = self.batch_size
-        mp = self.mp
-
-        theano_x_w = []
-        theano_x_p = []
-        theano_y = []
-        sent_length = []
-        num_prds = []
-        batch_index = []
-
-        samples = [sample for sample in samples if sample.n_prds > 0]
-        prev_n_prds = samples[0].n_prds
-        prev_n_words = samples[0].n_words
-        prev_index = 0
-        index = 0
-
-        for sample in samples:
-            n_prds = sample.n_prds
-            n_words = sample.n_words
-
-            #################################
-            # Check the boundary of batches #
-            #################################
-            if prev_n_words != n_words or index - prev_index > batch_size or (n_prds != prev_n_prds and mp):
-                batch_index.append((prev_index, index))
-                num_prds.append(prev_n_prds)
-                sent_length.append(prev_n_words)
-                prev_index = index
-                prev_n_prds = n_prds
-                prev_n_words = n_words
-
-            theano_x_w.extend(sample.x_w)
-            theano_x_p.extend(sample.x_p)
-            theano_y.extend(sample.y)
-            index += len(sample.x_w)
-
-        if index > prev_index:
-            batch_index.append((prev_index, index))
-            num_prds.append(prev_n_prds)
-            sent_length.append(prev_n_words)
-
-        assert len(batch_index) == len(sent_length) == len(num_prds)
-        return [shared(theano_x_w), shared(theano_x_p), shared(theano_y), shared(sent_length), shared(num_prds)], batch_index
-
-
-class Experimenter(object):
-
     def __init__(self, argv):
         self.argv = argv
         self.corpus_loader = None
-        self.preprocessor = None
+        self.sample_factory = None
 
-    def select_corpus_loader(self):
+    def set_corpus_loader(self):
         self.corpus_loader = CorpusLoader(min_unit='word', data_size=self.argv.data_size)
 
-    def select_preprocessor(self, vocab_word, vocab_label):
-        self.preprocessor = Preprocessor(vocab_word=vocab_word,
-                                         vocab_label=vocab_label,
-                                         batch_size=self.argv.batch_size,
-                                         window=self.argv.window,
-                                         mp=False)
+    def set_sample_factory(self, vocab_word, vocab_label):
+        self.sample_factory = BasicSampleFactory(vocab_word=vocab_word,
+                                                 vocab_label=vocab_label,
+                                                 batch_size=self.argv.batch_size,
+                                                 window_size=self.argv.window)
 
     def load_corpus_set(self):
         # corpus: 1D: n_sents, 2D: n_words, 3D: Word()
@@ -119,13 +30,13 @@ class Experimenter(object):
     def create_sample_set(self, corpus_set):
         # samples: 1D: n_sents; Sample
         train_corpus, dev_corpus, test_corpus = corpus_set
-        train_samples = self.preprocessor.create_samples(train_corpus)
-        dev_samples = self.preprocessor.create_samples(dev_corpus, test=True)
-        test_samples = self.preprocessor.create_samples(test_corpus, test=True)
+        train_samples = self.sample_factory.create_samples(train_corpus)
+        dev_samples = self.sample_factory.create_samples(dev_corpus, test=True)
+        test_samples = self.sample_factory.create_samples(test_corpus, test=True)
         return train_samples, dev_samples, test_samples
 
     def create_shared_samples(self, samples):
-        return self.preprocessor.get_shared_samples(samples)
+        return self.sample_factory.create_shared_batch_samples(samples)
 
     def create_vocab_label(self):
         vocab_label = Vocab()
@@ -175,3 +86,19 @@ class Experimenter(object):
     def show_sample_stats(sample_set, vocab_label):
         for samples in sample_set:
             sample_statistics(samples, vocab_label)
+
+
+class RankingPreprocessor(Preprocessor):
+
+    def __init__(self, argv):
+        super(RankingPreprocessor, self).__init__(argv)
+
+    def set_sample_factory(self, vocab_word, vocab_label):
+        self.sample_factory = RankingSampleFactory(vocab_word=vocab_word,
+                                                   vocab_label=vocab_label,
+                                                   batch_size=self.argv.batch_size,
+                                                   window_size=self.argv.window)
+
+    @staticmethod
+    def show_sample_stats(sample_set, vocab_label):
+        pass

@@ -110,6 +110,12 @@ class Word(object):
             if 1000 < a_id:
                 self.case_types[case_label] = 4
 
+    def has_args(self):
+        for arg_index in self.case_arg_index:
+            if arg_index > -1:
+                return True
+        return False
+
 
 class Wordsrl(object):
     label_dict = Vocab()

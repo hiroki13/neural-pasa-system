@@ -1,5 +1,5 @@
 import numpy as np
-from vocab import UNK, NA, GA, O, NI, PRD, GA_LABEL, O_LABEL
+from vocab import UNK, NA, GA, O, NI, PRD, GA_LABEL, O_LABEL, NI_LABEL
 
 
 class Sample(object):
@@ -7,10 +7,11 @@ class Sample(object):
     def __init__(self, sent, window):
         """
         sent: 1D: n_words; Word
-        word_ids: 1D: n_words; word_id
-        prd_indices: 1D: n_prds; word_id
-        x: 1D: n_prds, 2D: n_words, 3D: window; word_id
-        y: 1D: n_prds, 2D: n_words; label_id
+        word_ids: 1D: n_words; word id
+        prd_indices: 1D: n_prds; word id
+        x_w: 1D: n_prds, 2D: n_words, 3D: window; word id
+        x_p: 1D: n_prds, 2D: n_words; posit phi id
+        y: 1D: n_prds, 2D: n_words; label id
         """
         self.sent = sent
         self.word_ids = []
@@ -50,31 +51,30 @@ class Sample(object):
         prd_indices = []
 
         for word in self.sent:
-            # check if the word is a predicate or not
-            if word.is_prd:
-                p_labels = [vocab_label.get_id(NA) for i in xrange(self.n_words)]
-                p_labels[word.index] = vocab_label.get_id(PRD)
-
-                is_arg = False
-                for case_label, arg_index in enumerate(word.case_arg_index):
-                    if arg_index > -1:
-                        if case_label == GA_LABEL:
-                            p_labels[arg_index] = vocab_label.get_id(GA)
-                        elif case_label == O_LABEL:
-                            p_labels[arg_index] = vocab_label.get_id(O)
-                        else:
-                            p_labels[arg_index] = vocab_label.get_id(NI)
-                        is_arg = True
-
-                if is_arg:
-                    labels.append(p_labels)
-                    prd_indices.append(word.index)
+            if word.is_prd and word.has_args():
+                label_seq = self.create_label_seq(prd=word, vocab_label=vocab_label, n_words=self.n_words)
+                labels.append(label_seq)
+                prd_indices.append(word.index)
 
         assert len(labels) == len(prd_indices)
 
         self.label_ids = labels
         self.prd_indices = prd_indices
         self.n_prds = len(prd_indices)
+
+    @staticmethod
+    def create_label_seq(prd, vocab_label, n_words):
+        label_seq = [vocab_label.get_id(NA) for i in xrange(n_words)]
+        label_seq[prd.index] = vocab_label.get_id(PRD)
+        for case_label, arg_index in enumerate(prd.case_arg_index):
+            if arg_index > -1:
+                if case_label == GA_LABEL:
+                    label_seq[arg_index] = vocab_label.get_id(GA)
+                elif case_label == O_LABEL:
+                    label_seq[arg_index] = vocab_label.get_id(O)
+                else:
+                    label_seq[arg_index] = vocab_label.get_id(NI)
+        return label_seq
 
     def get_word_phi(self):
         phi = []
@@ -126,21 +126,29 @@ class Sample(object):
         return 1
 
     def set_x_y(self, word_phi, posit_phi):
-        x_w = []
-        x_p = []
-        y = []
+        assert len(word_phi) == len(posit_phi) == len(self.label_ids)
+        self.x_w = self._numpize(self._flatten(word_phi))
+        self.x_p = self._numpize(self._flatten(posit_phi))
+        self.y = self._numpize(self._flatten(self.label_ids))
 
-        assert len(word_phi) == len(posit_phi)
-        for sent_w_phi, sent_p_phi, sent_label in zip(word_phi, posit_phi, self.label_ids):
-            assert len(sent_w_phi) == len(sent_p_phi)
-            x_w += sent_w_phi
-            x_p += sent_p_phi
-            y += sent_label
+    @staticmethod
+    def _flatten(matrix):
+        vec = []
+        for row in matrix:
+            vec.extend(row)
+        return vec
 
-        self.x_w = numpize(x_w)
-        self.x_p = numpize(x_p)
-        self.y = numpize(y)
+    @staticmethod
+    def _numpize(sample):
+        return np.asarray(sample, dtype='int32')
 
 
-def numpize(sample):
-    return np.asarray(sample, dtype='int32')
+class RankingSample(Sample):
+
+    def __init__(self, sent, window):
+        super(RankingSample, self).__init__(sent, window)
+
+    @staticmethod
+    def create_label_seq(prd, vocab_label, n_words):
+        return prd.case_arg_index
+

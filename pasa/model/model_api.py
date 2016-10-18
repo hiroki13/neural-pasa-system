@@ -39,8 +39,8 @@ class ModelAPI(object):
                            n_labels=self.vocab_label.size())
 
     def compile_model(self):
-        # x: 1D: batch * n_words, 2D: 5 + window + 1; elem=word_id
-        # y: 1D: batch * n_cands; elem=label
+        # x: 1D: batch * n_words, 2D: 5 + window + 1; elem=word id
+        # y: 1D: batch * n_words; elem=label id
         self.model.compile(x_w=T.imatrix('x_w'),
                            x_p=T.ivector('x_p'),
                            y=T.ivector('y'),
@@ -109,6 +109,9 @@ class ModelAPI(object):
                                          (argv.layers, argv.window, argv.reg))
                         self.save_config('config.intra.layers-%d.window-%d.reg-%f' %
                                          (argv.layers, argv.window, argv.reg))
+
+                    if argv.result:
+                        self.output_results('result.dev.txt', dev_samples)
 
             ########
             # Test #

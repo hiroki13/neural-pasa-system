@@ -1,16 +1,19 @@
 import numpy as np
 import theano
 
+from abc import ABCMeta, abstractmethod
 from ..utils.io_utils import say
-from ..utils.preprocessor import Experimenter
+from ..utils.preprocessor import Preprocessor, RankingPreprocessor
 from ..ling.vocab import Vocab, PAD, UNK
 from ..model.model_api import ModelAPI
 
 
-class Trainer(Experimenter):
+class Trainer(object):
+    __metaclass__ = ABCMeta
 
     def __init__(self, argv):
-        super(Trainer, self).__init__(argv)
+        self.argv = argv
+        self.preprocessor = None
 
         self.vocab_word = None
         self.vocab_label = None
@@ -30,16 +33,22 @@ class Trainer(Experimenter):
         self._setup_label()
         self._setup_samples()
 
+    def _load_corpus_set(self):
+        self.preprocessor.set_corpus_loader()
+        return self.preprocessor.load_corpus_set()
+
+    def _show_corpus_stats(self, corpus_set):
+        self.preprocessor.show_corpus_stats(corpus_set)
+
     def _setup_corpus(self):
-        self.select_corpus_loader()
-        self.corpus_set = self.load_corpus_set()
-        self.show_corpus_stats(self.corpus_set)
+        self.corpus_set = self._load_corpus_set()
+        self._show_corpus_stats(self.corpus_set)
 
     def _setup_vocab_word(self):
-        vocab_word, emb = self.load_init_emb()
+        vocab_word, emb = self.preprocessor.load_init_emb()
 
         if emb is None:
-            vocab_word = self.create_vocab_word(self.corpus_set[0])
+            vocab_word = self.preprocessor.create_vocab_word(self.corpus_set[0])
         elif emb is not None and self.argv.fix == 0:
             vocab_word, emb, untrainable_emb = self._divide_emb(self.corpus_set[0], vocab_word, emb)
             self.untrainable_emb = untrainable_emb
@@ -57,6 +66,7 @@ class Trainer(Experimenter):
         untrainable_emb = []
 
         for w, w_id in vocab_emb_word.w2i.items():
+            # TODO: change 'PAD' to '<PAD>'
             if w == PAD:
                 continue
             if vocab_trainable_word.has_key(w):
@@ -98,13 +108,13 @@ class Trainer(Experimenter):
         return vocab_word
 
     def _setup_label(self):
-        self.vocab_label = self.create_vocab_label()
+        self.vocab_label = self.preprocessor.create_vocab_label()
 
     def _setup_samples(self):
-        self.select_preprocessor(self.vocab_word, self.vocab_label)
-        sample_set = self.create_sample_set(self.corpus_set)
-        train_sample_shared, train_batch_index = self.create_shared_samples(sample_set[0])
-        self.show_sample_stats(sample_set, self.vocab_label)
+        self.preprocessor.set_sample_factory(self.vocab_word, self.vocab_label)
+        sample_set = self.preprocessor.create_sample_set(self.corpus_set)
+        train_sample_shared, train_batch_index = self.preprocessor.create_shared_samples(sample_set[0])
+        self.preprocessor.show_sample_stats(sample_set, self.vocab_label)
 
         self.train_samples = train_sample_shared
         self.dev_samples = sample_set[1]
@@ -127,7 +137,22 @@ class Trainer(Experimenter):
                             untrainable_emb=self.untrainable_emb)
 
 
+class BasicTrainer(Trainer):
+
+    def __init__(self, argv):
+        super(BasicTrainer, self).__init__(argv)
+        self.preprocessor = Preprocessor(argv)
+
+
+class RankingTrainer(Trainer):
+
+    def __init__(self, argv):
+        super(RankingTrainer, self).__init__(argv)
+        self.preprocessor = RankingPreprocessor(argv)
+
+
 def main(argv):
-    trainer = Trainer(argv)
+    gen_trainer = BasicTrainer if argv.model == 'base' else RankingTrainer
+    trainer = gen_trainer(argv)
     trainer.setup_training()
     trainer.train_model()

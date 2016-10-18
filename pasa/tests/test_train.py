@@ -1,46 +1,43 @@
-import theano
-import numpy as np
-import random
+def main(argv):
+    print test_setup_training(argv)
 
-theano.config.floatX = 'float32'
-np.random.seed(0)
-random.seed(0)
+
+def test_setup_training(argv):
+    from ..intra_pasa.train import RankingTrainer
+
+    # 1D: n_sents (2), 2D: n_prds (2), 3D: n_words (2), 4D: dim_h (2)
+    h = [
+         [
+          [[1, 2], [3, 4]],
+          [[4, 3], [2, 1]]
+         ],
+         [
+          [[3, 4], [1, 2]],
+          [[2, 1], [4, 3]]
+         ]
+        ]
+    # 1D: n_sents (2), 2D: n_prds (2), 3D: n_words (2), 4D: n_labels (3)
+    p = [
+         [
+          [[0.1, 0.2, 0.7], [0.3, 0.4, 0.3]],
+          [[0.2, 0.3, 0.5], [0.4, 0.1, 0.5]]
+         ],
+         [
+          [[0.6, 0.2, 0.2], [0.1, 0.7, 0.2]],
+          [[0.4, 0.2, 0.4], [0.5, 0.2, 0.3]]
+         ]
+        ]
+    corpus_set = [(h, p), (None, None), (None, None)]
+
+    trainer = RankingTrainer(argv=argv)
+    trainer.corpus_set = corpus_set
+    trainer.setup_training()
 
 
 if __name__ == '__main__':
     import argparse
-
     parser = argparse.ArgumentParser(description='The Neural PAS System')
 
-    ########
-    # Mode #
-    ########
-    parser.add_argument('-mode', default='train', help='train/test')
-
-    #########
-    # Model #
-    #########
-    parser.add_argument('--model', type=str, default='base', help='base/rank')
-    parser.add_argument('--check', type=bool, default=False, help='check')
-    parser.add_argument('--save', type=bool, default=False, help='save model')
-    parser.add_argument('--result', type=bool, default=False, help='output results')
-    parser.add_argument('--load_params', type=str, default=None, help='load trained parameters')
-    parser.add_argument('--load_config', type=str, default=None, help='load configuration')
-
-    ########
-    # Data #
-    ########
-    parser.add_argument('--train_data', help='path to training data')
-    parser.add_argument('--dev_data', help='path to development data')
-    parser.add_argument('--test_data', help='path to test data')
-    parser.add_argument('--data_size', type=int, default=100000)
-    parser.add_argument('--vocab_cut_off', type=int, default=0)
-    parser.add_argument('--word', type=str, default=None, help='word')
-    parser.add_argument('--label', type=str, default=None, help='label')
-
-    ########################
-    # Neural Architectures #
-    ########################
     parser.add_argument('--unit', default='gru', help='unit')
     parser.add_argument('--fix', type=int, default=0, help='fix or not init embeddings')
     parser.add_argument('--layers',  type=int, default=1, help='number of layers')
@@ -53,9 +50,6 @@ if __name__ == '__main__':
     parser.add_argument('--attention', type=int, default=0, help='attention')
     parser.add_argument('--pooling', default='max', help='pooling')
 
-    #######################
-    # Training Parameters #
-    #######################
     parser.add_argument('--batch_size', type=int, default=32, help='mini batch size')
     parser.add_argument('--opt', default='adam', help='optimization method')
     parser.add_argument('--epoch', type=int, default=50, help='number of epochs to train')
@@ -68,12 +62,4 @@ if __name__ == '__main__':
     print argv
     print
 
-    ########
-    # Mode #
-    ########
-    if argv.mode == 'train':
-        import train
-        train.main(argv)
-    else:
-        import test
-        test.main(argv)
+    main(argv)

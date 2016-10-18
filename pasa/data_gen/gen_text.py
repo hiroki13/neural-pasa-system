@@ -1,12 +1,12 @@
 from collections import defaultdict
 
 from ..utils.io_utils import say
-from ..utils.preprocessor import Experimenter
+from ..utils.preprocessor import Preprocessor
 from ..ling.vocab import UNK
 from ..utils.stats import corpus_statistics
 
 
-class TextGenerator(Experimenter):
+class TextGenerator(Preprocessor):
 
     def __init__(self, argv):
         super(TextGenerator, self).__init__(argv)
