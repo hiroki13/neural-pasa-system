@@ -5,7 +5,7 @@ from abc import ABCMeta, abstractmethod
 from ..utils.io_utils import say
 from ..utils.preprocessor import Preprocessor, RankingPreprocessor
 from ..ling.vocab import Vocab, PAD, UNK
-from ..model.model_api import ModelAPI
+from ..model.model_api import ModelAPI, RankingModelAPI
 
 
 class Trainer(object):
@@ -149,6 +149,31 @@ class RankingTrainer(Trainer):
     def __init__(self, argv):
         super(RankingTrainer, self).__init__(argv)
         self.preprocessor = RankingPreprocessor(argv)
+
+    def _setup_samples(self):
+        self.preprocessor.set_sample_factory(self.vocab_word, self.vocab_label)
+        sample_set = self.preprocessor.create_sample_set(self.corpus_set)
+        train_sample_shared = self.preprocessor.create_shared_samples(sample_set[0])
+        self.preprocessor.show_sample_stats(sample_set, self.vocab_label)
+
+        self.train_samples = train_sample_shared
+        self.dev_samples = sample_set[1]
+        self.test_samples = sample_set[2]
+
+    def train_model(self):
+        say('\n\nTRAINING A MODEL\n')
+        model_api = RankingModelAPI(argv=self.argv,
+                                    emb=self.trainable_emb,
+                                    vocab_word=self.vocab_word,
+                                    vocab_label=self.vocab_label)
+
+        model_api.compile()
+
+        model_api.train_all(argv=self.argv,
+                            train_samples=self.train_samples,
+                            dev_samples=self.dev_samples,
+                            test_samples=self.test_samples,
+                            untrainable_emb=self.untrainable_emb)
 
 
 def main(argv):

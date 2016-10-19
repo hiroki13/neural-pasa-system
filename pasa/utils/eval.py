@@ -64,6 +64,26 @@ class Eval(object):
                 elif y == NI_ID:
                     self.results_gold[2] += 1
 
+    def update_rank_results(self, batch_y_hat, batch_y, null_arg_index):
+        assert len(batch_y_hat) == len(batch_y)
+        assert len(batch_y_hat[0]) == len(batch_y[0])
+
+        for i in xrange(len(batch_y_hat)):
+            sent_y_hat = batch_y_hat[i]
+            sent_y = batch_y[i]
+            for case_index in xrange(len(sent_y_hat)):
+                y_hat = sent_y_hat[case_index]
+                y = sent_y[case_index]
+
+                if y != null_arg_index and y_hat == y:
+                    self.corrects[case_index] += 1
+
+                if y_hat != null_arg_index:
+                    self.results_sys[case_index] += 1
+
+                if y != null_arg_index:
+                    self.results_gold[case_index] += 1
+
     def set_metrics(self):
         for c in xrange(3):
             self.precision[c] = self.corrects[c] / self.results_sys[c]

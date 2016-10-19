@@ -47,8 +47,8 @@ class SampleFactory(object):
         theano_x_w = []
         theano_x_p = []
         theano_y = []
-        sent_length = []
-        num_prds = []
+        sent_len = []
+        n_prds = []
         batch_index = []
 
         samples = [sample for sample in samples if sample.n_prds > 0]
@@ -58,19 +58,17 @@ class SampleFactory(object):
         index = 0
 
         for sample in samples:
-            n_prds = sample.n_prds
-            n_words = sample.n_words
-
-            #################################
-            # Check the boundary of batches #
-            #################################
-            if prev_n_words != n_words or index - prev_index > self.batch_size:
+            if self.is_batch_boundary(sample.n_words,
+                                      prev_n_words,
+                                      index,
+                                      prev_index,
+                                      self.batch_size):
                 batch_index.append((prev_index, index))
-                num_prds.append(prev_n_prds)
-                sent_length.append(prev_n_words)
+                n_prds.append(prev_n_prds)
+                sent_len.append(prev_n_words)
                 prev_index = index
-                prev_n_prds = n_prds
-                prev_n_words = n_words
+                prev_n_prds = sample.n_prds
+                prev_n_words = sample.n_words
 
             theano_x_w.extend(sample.x_w)
             theano_x_p.extend(sample.x_p)
@@ -79,16 +77,22 @@ class SampleFactory(object):
 
         if index > prev_index:
             batch_index.append((prev_index, index))
-            num_prds.append(prev_n_prds)
-            sent_length.append(prev_n_words)
+            n_prds.append(prev_n_prds)
+            sent_len.append(prev_n_words)
 
-        assert len(batch_index) == len(sent_length) == len(num_prds)
+        assert len(batch_index) == len(sent_len) == len(n_prds)
 
         return [self._shared(theano_x_w),
                 self._shared(theano_x_p),
                 self._shared(theano_y),
-                self._shared(sent_length),
-                self._shared(num_prds)], batch_index
+                self._shared(sent_len),
+                self._shared(n_prds)], batch_index
+
+    @staticmethod
+    def is_batch_boundary(n_words, prev_n_words, index, prev_index, batch_size):
+        if prev_n_words != n_words or index - prev_index > batch_size:
+            return True
+        return False
 
     @staticmethod
     def _sort_by_n_words(corpus):
@@ -112,3 +116,48 @@ class RankingSampleFactory(SampleFactory):
     def create_sample(self, sent):
         return RankingSample(sent=sent, window=self.window)
 
+    def create_shared_batch_samples(self, samples):
+        """
+        :param samples: 1D: n_sents; Sample
+        """
+        batches = []
+        x_w = []
+        x_p = []
+        y = []
+
+        samples = [sample for sample in samples if sample.n_prds > 0]
+        prev_n_words = samples[0].n_words
+
+        for sample in samples:
+            if self.is_batch_boundary(sample.n_words,
+                                      prev_n_words,
+                                      y,
+                                      self.batch_size):
+
+                batches.append(self.create_batch(x_w, x_p, y, prev_n_words))
+                prev_n_words = sample.n_words
+                x_w = []
+                x_p = []
+                y = []
+
+            x_w.extend(sample.x_w)  # 1D: n_prds * n_words, 2D: 5 + window
+            x_p.extend(sample.x_p)  # 1D: n_prds * n_words
+            y.extend(sample.y)  # 1D: n_prds, 2D: n_labels (3)
+
+        if x_w:
+            batches.append(self.create_batch(x_w, x_p, y, prev_n_words))
+
+        return batches
+
+    def create_batch(self, x_w, x_p, y, n_words):
+        return self._numpize(x_w), self._numpize(x_p), self._numpize(y), self._numpize(n_words)
+
+    @staticmethod
+    def _numpize(sample):
+        return np.asarray(sample, dtype='int32')
+
+    @staticmethod
+    def is_batch_boundary(n_words, prev_n_words, y, batch_size):
+        if prev_n_words != n_words or len(y) >= batch_size:
+            return True
+        return False

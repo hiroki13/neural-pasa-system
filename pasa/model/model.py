@@ -160,17 +160,11 @@ class RankingModel(Model):
     def __init__(self, argv, emb, n_vocab, n_labels):
         super(RankingModel, self).__init__(argv, emb, n_vocab, n_labels)
 
-    def compile(self, x_w, x_p, y, n_words, n_prds=None):
+    def compile(self, x_w, x_p, y, n_words):
+        self.inputs = [x_w, x_p, y, n_words]
+
         argv = self.argv
         batch_size = x_w.shape[0] / n_words
-
-        ###################
-        # Input variables #
-        ###################
-        if n_prds:
-            self.inputs = [x_w, x_p, y, n_words, n_prds]
-        else:
-            self.inputs = [x_w, x_p, y, n_words]
 
         self.dropout = theano.shared(np.float32(argv.dropout).astype(theano.config.floatX))
         self.set_layers(x_w, n_words, self.emb)
@@ -182,12 +176,15 @@ class RankingModel(Model):
         x = self.emb_layer_forward(x_w, x_p, batch_size, n_words)
         h = self.hidden_layer_forward(x)
         h = self.output_layer_forward(h)
+
+        # 1D: 1, 2D: batch, 3D: dim_h
+        NULL = T.zeros(shape=(1, h.shape[1], h.shape[2]))
         h = T.concatenate([h, NULL], 0)
 
         ###########
         # Outputs #
         ###########
-        self.y_gold = y.reshape((batch_size, n_words))
+        self.y_gold = y
         self.y_pred = self.output_layer.decode(h)
 
         ############
@@ -218,7 +215,7 @@ class RankingModel(Model):
         say('No. of rnn layers: %d\n' % (len(self.layers)-3))
 
     def objective_f(self, h, reg):
-        pos_scores = self.output_layer.get_y_scores(h, self.y_gold.dimshuffle((1, 0)))
+        pos_scores = self.output_layer.get_y_scores(h, self.y_gold)
         neg_scores = self.output_layer.get_y_hat_scores(h)
         nll = hinge_loss(pos_scores, neg_scores)
         cost = nll + reg * L2_sqr(self.params) / 2.

@@ -231,19 +231,28 @@ class RankingLayer(Layer):
     def __init__(self, n_i, n_labels):
         super(RankingLayer, self).__init__(n_i, n_labels)
 
+    def forward(self, x):
+        """
+        :param x: 1D: n_words, 2D: batch, 3D: dim_h
+        :param h: 1D: n_words, 2D: batch, 3D: dim_h
+        :return: 1D: n_words, 2D: batch, 3D: n_labels; log probability of a label
+        """
+        return T.dot(x, self.W)
+
     @staticmethod
     def get_y_scores(h, y):
         """
-        :param h: 1D: n_words, 2D: batch, 3D: n_labels; score of a label
+        :param h: 1D: n_words+1, 2D: batch, 3D: n_labels; score of a label
         :param y: 1D: batch, 2D: n_labels; word index
         :return: 1D: batch, 2D: n_labels; the highest scores
         """
-        # 1D: batch, 2D: n_labels, 3D: n_words
+        # 1D: batch, 2D: n_labels, 3D: n_words+1
         h = h.dimshuffle(1, 2, 0)
-        # 1D: batch * n_labels, 2D: n_words
+        # 1D: batch * n_labels, 2D: n_words+1
         h_reshaped = h.reshape((h.shape[0] * h.shape[1], -1))
         # 1D: batch, 2D: n_labels
-        return h_reshaped[y.ravel()].reshape((h.shape[0], h.shape[1]))
+        y = y.ravel()
+        return h_reshaped[T.arange(y.shape[0]), y].reshape((h.shape[0], h.shape[1]))
 
     @staticmethod
     def get_y_hat_scores(h):

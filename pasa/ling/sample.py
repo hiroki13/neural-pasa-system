@@ -52,7 +52,7 @@ class Sample(object):
 
         for word in self.sent:
             if word.is_prd and word.has_args():
-                label_seq = self.create_label_seq(prd=word, vocab_label=vocab_label, n_words=self.n_words)
+                label_seq = self.create_label_seq(prd=word, vocab_label=vocab_label)
                 labels.append(label_seq)
                 prd_indices.append(word.index)
 
@@ -62,9 +62,8 @@ class Sample(object):
         self.prd_indices = prd_indices
         self.n_prds = len(prd_indices)
 
-    @staticmethod
-    def create_label_seq(prd, vocab_label, n_words):
-        label_seq = [vocab_label.get_id(NA) for i in xrange(n_words)]
+    def create_label_seq(self, prd, vocab_label):
+        label_seq = [vocab_label.get_id(NA) for i in xrange(self.n_words)]
         label_seq[prd.index] = vocab_label.get_id(PRD)
         for case_label, arg_index in enumerate(prd.case_arg_index):
             if arg_index > -1:
@@ -148,7 +147,19 @@ class RankingSample(Sample):
     def __init__(self, sent, window):
         super(RankingSample, self).__init__(sent, window)
 
-    @staticmethod
-    def create_label_seq(prd, vocab_label, n_words):
-        return prd.case_arg_index
+    def create_label_seq(self, prd, vocab_label):
+        label_seq = []
+        null_arg_index = self.n_words
+        for index in prd.case_arg_index:
+            if index < 0:
+                case_arg_index = null_arg_index
+            else:
+                case_arg_index = index
+            label_seq.append(case_arg_index)
+        return label_seq
 
+    def set_x_y(self, word_phi, posit_phi):
+        assert len(word_phi) == len(posit_phi) == len(self.label_ids)
+        self.x_w = self._numpize(self._flatten(word_phi))
+        self.x_p = self._numpize(self._flatten(posit_phi))
+        self.y = self._numpize(self.label_ids)
