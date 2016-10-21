@@ -28,7 +28,7 @@ class Model(object):
         ####################
         # Output variables #
         ####################
-        self.y_score = None
+        self.y_prob = None
         self.y_gold = None
         self.y_pred = None
         self.nll = None
@@ -72,6 +72,7 @@ class Model(object):
         ###########
         self.y_gold = y.reshape((batch_size, n_words))
         self.y_pred = self.output_layer.decode(h)
+        self.y_prob = h.dimshuffle(1, 0, 2)
 
         ############
         # Training #

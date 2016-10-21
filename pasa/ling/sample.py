@@ -156,6 +156,7 @@ class RankingSample(Sample):
             else:
                 case_arg_index = index
             label_seq.append(case_arg_index)
+        label_seq.append(prd.index)
         return label_seq
 
     def set_x_y(self, word_phi, posit_phi):

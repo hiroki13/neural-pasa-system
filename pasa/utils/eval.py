@@ -1,3 +1,4 @@
+import math
 import numpy as np
 
 from ..utils.io_utils import say
@@ -71,7 +72,7 @@ class Eval(object):
         for i in xrange(len(batch_y_hat)):
             sent_y_hat = batch_y_hat[i]
             sent_y = batch_y[i]
-            for case_index in xrange(len(sent_y_hat)):
+            for case_index in xrange(len(sent_y_hat)-1):
                 y_hat = sent_y_hat[case_index]
                 y = sent_y[case_index]
 
@@ -83,6 +84,66 @@ class Eval(object):
 
                 if y != null_arg_index:
                     self.results_gold[case_index] += 1
+
+    def select_best_f1_list(self, n_best_list, batch_y):
+        best_list = None
+        best_f1 = -100.0
+        for n_th_list in n_best_list:
+            corrects = [0.0 for i in xrange(3)]
+            results_sys = [0.0 for i in xrange(3)]
+            results_gold = [0.0 for i in xrange(3)]
+
+            for i in xrange(len(n_th_list)):
+                sent_y_hat = n_th_list[i]
+                sent_y = batch_y[i]
+                for j in xrange(len(sent_y_hat)):
+                    y_hat = sent_y_hat[j]
+                    y = sent_y[j]
+
+                    if y_hat == y:
+                        if y_hat == GA_ID:
+                            corrects[0] += 1
+                        elif y_hat == O_ID:
+                            corrects[1] += 1
+                        elif y_hat == NI_ID:
+                            corrects[2] += 1
+
+                    if y_hat == GA_ID:
+                        results_sys[0] += 1
+                    elif y_hat == O_ID:
+                        results_sys[1] += 1
+                    elif y_hat == NI_ID:
+                        results_sys[2] += 1
+
+                    if y == GA_ID:
+                        results_gold[0] += 1
+                    elif y == O_ID:
+                        results_gold[1] += 1
+                    elif y == NI_ID:
+                        results_gold[2] += 1
+
+            f1 = self.calc_f1(corrects, results_sys, results_gold)
+            if best_f1 < f1:
+                best_f1 = f1
+                best_list = n_th_list
+
+        assert best_list is not None
+        return best_list
+
+    @staticmethod
+    def calc_f1(corrects, results_sys, results_gold):
+        all_corrects = np.sum(corrects)
+        all_results_sys = np.sum(results_sys)
+        all_results_gold = np.sum(results_gold)
+
+        all_precision = all_corrects / all_results_sys
+        all_recall = all_corrects / all_results_gold
+        all_f1 = 2 * all_precision * all_recall / (all_precision + all_recall)
+
+        if math.isnan(all_f1):
+            all_f1 = 0.0
+
+        return all_f1
 
     def set_metrics(self):
         for c in xrange(3):

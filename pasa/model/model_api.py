@@ -3,6 +3,7 @@ import time
 import gzip
 import math
 import cPickle as pickle
+from copy import deepcopy
 
 import numpy as np
 import theano
@@ -11,6 +12,7 @@ import theano.tensor as T
 from model import Model, RankingModel
 from ..utils.io_utils import say
 from ..utils.eval import Eval
+from ..decoder.decoder import Decoder
 
 
 class ModelAPI(object):
@@ -22,6 +24,7 @@ class ModelAPI(object):
         self.vocab_label = vocab_label
 
         self.model = None
+        self.decoder = None
         self.train = None
         self.predict = None
 
@@ -29,6 +32,7 @@ class ModelAPI(object):
         say('\n\nBuilding a model API...\n')
         self.set_model()
         self.compile_model()
+        self.set_decoder()
         self.set_train_f(train_sample_shared)
         self.set_predict_f()
 
@@ -45,6 +49,9 @@ class ModelAPI(object):
                            x_p=T.ivector('x_p'),
                            y=T.ivector('y'),
                            n_words=T.iscalar('n_words'))
+
+    def set_decoder(self):
+        self.decoder = Decoder()
 
     def set_train_f(self, samples):
         index = T.iscalar('index')
@@ -66,7 +73,7 @@ class ModelAPI(object):
     def set_predict_f(self):
         model = self.model
         self.predict = theano.function(inputs=model.inputs,
-                                       outputs=model.y_pred,
+                                       outputs=model.y_prob,
                                        on_unused_input='ignore'
                                        )
 
@@ -98,7 +105,14 @@ class ModelAPI(object):
             update = False
             if argv.dev_data:
                 print '\n  DEV\n\t',
-                dev_f1 = self.predict_all(dev_samples)
+                dev_results, dev_results_prob = self.predict_all(dev_samples)
+                dev_f1 = self.eval_all(dev_results, dev_samples)
+
+                all_prd_indices = self.create_prd_index_lists(dev_samples)
+                n_best_lists = self.create_n_best_lists(all_prob_lists=dev_results_prob, all_prd_indices=all_prd_indices)
+                gold_labels = self.create_gold_labels(dev_samples)
+                self.eval_n_best_list(n_best_lists, gold_labels)
+
                 if best_dev_f1 < dev_f1:
                     best_dev_f1 = dev_f1
                     f1_history[epoch+1] = [best_dev_f1]
@@ -118,7 +132,8 @@ class ModelAPI(object):
             ########
             if argv.test_data:
                 print '\n  TEST\n\t',
-                test_f1 = self.predict_all(test_samples)
+                test_results, test_results_prob = self.predict_all(test_samples)
+                test_f1 = self.eval_all(test_results, test_samples)
                 if update:
                     if epoch+1 in f1_history:
                         f1_history[epoch+1].append(test_f1)
@@ -161,10 +176,8 @@ class ModelAPI(object):
         train_eval.show_results()
 
     def predict_all(self, samples):
-        """
-        :param samples: 1D: n_sents: Sample
-        """
-        pred_eval = Eval()
+        all_best_lists = []
+        all_prob_lists = []
         start = time.time()
         self.model.dropout.set_value(0.0)
 
@@ -174,15 +187,57 @@ class ModelAPI(object):
                 sys.stdout.flush()
 
             if sample.n_prds == 0:
+                all_best_lists.append([])
+                all_prob_lists.append([])
                 continue
 
-            results_sys = self.predict(sample.x_w, sample.x_p, sample.y, sample.n_words)
-            pred_eval.update_results(results_sys, sample.label_ids)
+            prob_lists = self.predict(sample.x_w, sample.x_p, sample.y, sample.n_words)
+            best_list = self.decode_argmax(prob_lists=prob_lists, prd_indices=sample.prd_indices)
+            all_best_lists.append(best_list)
+            all_prob_lists.append(prob_lists)
 
         print '\tTime: %f' % (time.time() - start)
-        pred_eval.show_results()
+        return all_best_lists, all_prob_lists
 
+    def decode_argmax(self, prob_lists, prd_indices):
+        assert len(prob_lists) == len(prd_indices)
+        return self.decoder.decode_argmax(prob_lists, prd_indices)
+
+    @staticmethod
+    def create_prd_index_lists(samples):
+        return [sample.prd_indices for sample in samples]
+
+    @staticmethod
+    def create_gold_labels(samples):
+        return [sample.label_ids for sample in samples]
+
+    def create_n_best_lists(self, all_prob_lists, all_prd_indices, N=2):
+        say('\n\n  Create N-best list\n')
+        assert len(all_prob_lists) == len(all_prd_indices)
+        return self.decoder.decode_n_best(all_prob_lists=all_prob_lists, all_prd_indices=all_prd_indices, N=N)
+
+    @staticmethod
+    def eval_all(results, samples):
+        pred_eval = Eval()
+        assert len(results) == len(samples)
+        for result, sample in zip(results, samples):
+            if len(result) == 0:
+                continue
+            pred_eval.update_results(batch_y_hat=result, batch_y=sample.label_ids)
+        pred_eval.show_results()
         return pred_eval.all_f1
+
+    @staticmethod
+    def eval_n_best_list(n_best_lists, gold_labels):
+        list_eval = Eval()
+        assert len(n_best_lists) == len(gold_labels)
+        for n_best_list, batch_y in zip(n_best_lists, gold_labels):
+            if len(batch_y) == 0:
+                continue
+            best_f1_list = list_eval.select_best_f1_list(n_best_list=n_best_list, batch_y=batch_y)
+            list_eval.update_results(batch_y_hat=best_f1_list, batch_y=batch_y)
+        list_eval.show_results()
+        say('\n\n')
 
     def output_results(self, fn, samples):
         ###########
@@ -292,7 +347,7 @@ class RankingModelAPI(ModelAPI):
         self.model = RankingModel(argv=self.argv,
                                   emb=self.emb,
                                   n_vocab=self.vocab_word.size(),
-                                  n_labels=3)
+                                  n_labels=4)
 
     def compile_model(self):
         # x: 1D: batch * n_words, 2D: 5 + window; elem=word id
