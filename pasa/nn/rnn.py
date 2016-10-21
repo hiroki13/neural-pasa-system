@@ -85,6 +85,86 @@ class RNNLayers(object):
         return x + h
 
 
+class GridNetwork(RNNLayers):
+
+    def __init__(self, unit, depth, n_in, n_h):
+        super(GridNetwork, self).__init__(unit, depth, n_in, n_h)
+
+    def set_forward_func(self, unit):
+        return self.grid_propagate
+
+    @staticmethod
+    def set_layers(unit, depth, n_in, n_h):
+        if unit == 'gru':
+            layer = GRU
+        else:
+            layer = LSTM
+        layers = []
+        for i in xrange(depth):
+            layers.extend([layer(n_h=n_h) for i in xrange(4)])
+            layers.append(ConnectedLayer(n_i=n_h*4, n_h=n_h))
+        return layers
+
+    def grid_propagate(self, x):
+        """
+        :param x: 1D: batch, 2D: n_prds, 3D: n_words, 4D: dim_h
+        :return: 1D: batch, 2D: n_prds, 3D: n_words, 4D: dim_h
+        """
+        h = T.zeros(x.shape, dtype=theano.config.floatX)
+        for i in xrange(0, self.depth):
+            hf = self.forward_all(self.layers[i*5], x, h)
+            hb = self.backward_all(self.layers[(i*5)+1], x, h)
+            hu = self.upward_all(self.layers[(i*5)+2], x, h)
+            hd = self.downward_all(self.layers[(i*5)+3], x, h)
+            h = self.dot(self.layers[(i*5)+4], hf, hb, hu, hd)
+        return h
+
+    @staticmethod
+    def forward_all(layer, x, h):
+        """
+        :param x: 1D: batch, 2D: n_prds, 3D: n_words, 4D: dim_h
+        :param h: 1D: batch, 2D: n_prds, 3D: n_words, 4D: dim_h
+        :return: 1D: n_words, 2D: batch, 3D: n_prds, 4D: dim_h
+        """
+        x = x.dimshuffle(2, 0, 1, 3)
+        h = h[:, :, 0]
+        return layer.forward_all(x, h)
+
+    @staticmethod
+    def backward_all(layer, x, h):
+        x = x.dimshuffle(2, 0, 1, 3)
+        h = h[:, :, -1]
+        return layer.forward_all(x[::-1], h)
+
+    @staticmethod
+    def upward_all(layer, x, h):
+        """
+        :param x: 1D: batch, 2D: n_prds, 3D: n_words, 4D: dim_h
+        :param h: 1D: batch, 2D: n_prds, 3D: n_words, 4D: dim_h
+        :return: 1D: n_prds, 2D: batch, 3D: n_words, 4D: dim_h
+        """
+        x = x.dimshuffle(1, 0, 2, 3)
+        h = h.dimshuffle(0, 2, 1, 3)
+        h = h[:, :, 0]
+        return layer.forward_all(x, h)
+
+    @staticmethod
+    def downward_all(layer, x, h):
+        x = x.dimshuffle(1, 0, 2, 3)
+        h = h.dimshuffle(0, 2, 1, 3)
+        h = h[:, :, -1]
+        return layer.forward_all(x[::-1], h)
+
+    @staticmethod
+    def dot(layer, hf, hb, hu, hd):
+        hf = hf.dimshuffle(1, 2, 0, 3)
+        hb = hb.dimshuffle(1, 2, 0, 3)[::-1]
+        hu = hu.dimshuffle(1, 0, 2, 3)
+        hd = hd.dimshuffle(1, 0, 2, 3)[::-1]
+        h = T.concatenate([hf, hb, hu, hd], axis=3)
+        return layer.dot(h)
+
+
 class GRU(object):
 
     def __init__(self, n_h=32, activation=tanh):

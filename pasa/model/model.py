@@ -221,3 +221,75 @@ class RankingModel(Model):
         nll = hinge_loss(pos_scores, neg_scores)
         cost = nll + reg * L2_sqr(self.params) / 2.
         return nll, cost
+
+
+class RerankingModel(object):
+
+    def __init__(self, argv, emb, n_vocab):
+
+        self.argv = argv
+        self.emb = emb
+        self.n_vocab = n_vocab
+        self.dropout = None
+
+        ###################
+        # Input variables #
+        ###################
+        self.inputs = None
+
+        ####################
+        # Output variables #
+        ####################
+        self.y_prob = None
+        self.y_gold = None
+        self.y_pred = None
+        self.nll = None
+        self.cost = None
+
+        ##############
+        # Parameters #
+        ##############
+        self.emb_layer = None
+        self.hidden_layers = None
+        self.output_layer = None
+        self.layers = []
+        self.params = []
+        self.update = None
+
+    def compile(self, x_w, x_p, x_l, x_s, y):
+        """
+        :param x_w: 1D: batch, 2D: n_lists, 3D: n_prds, 4D: n_words, 5D: 5+window; word id
+        :param x_p: 1D: batch, 2D: n_lists, 3D: n_prds, 4D: n_words; 0/1
+        :param x_l: 1D: batch, 2D: n_lists, 3D: n_prds, 4D: n_words; label id
+        :param x_s: 1D: batch, 2D: n_lists, 3D: n_prds, 4D: n_words; score
+        :param y: 1D: batch; index of the best f1 list
+        :return:
+        """
+        argv = self.argv
+        batch_size = x_w.shape[0]
+
+        self.inputs = [x_w, x_p, x_l, x_s, y]
+
+        self.dropout = theano.shared(np.float32(argv.dropout).astype(theano.config.floatX))
+        self.set_layers(x_w, self.emb)
+        self.set_params()
+
+        ############
+        # Networks #
+        ############
+        x = self.emb_layer_forward(x_w, x_p, batch_size)
+        h = self.hidden_layer_forward(x)
+        h = self.output_layer_forward(h)
+
+        ###########
+        # Outputs #
+        ###########
+        self.y_gold = y
+        self.y_pred = self.output_layer.decode(h)
+        self.y_prob = h.dimshuffle(1, 0, 2)
+
+        ############
+        # Training #
+        ############
+        self.nll, self.cost = self.objective_f(h=h, reg=argv.reg)
+        self.update = self.optimize(cost=self.cost, opt=argv.opt, lr=argv.lr)

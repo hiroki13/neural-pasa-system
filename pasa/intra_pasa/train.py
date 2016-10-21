@@ -5,15 +5,16 @@ from abc import ABCMeta, abstractmethod
 from ..utils.io_utils import say
 from ..utils.preprocessor import Preprocessor, RankingPreprocessor
 from ..ling.vocab import Vocab, PAD, UNK
-from ..model.model_api import ModelAPI, RankingModelAPI
+from ..model.model_api import ModelAPI, RankingModelAPI, RerankingModelAPI
 
 
 class Trainer(object):
     __metaclass__ = ABCMeta
 
-    def __init__(self, argv):
+    def __init__(self, argv, preprocessor):
         self.argv = argv
-        self.preprocessor = None
+        self.preprocessor = preprocessor
+        self.model_api = None
 
         self.vocab_word = None
         self.vocab_label = None
@@ -123,7 +124,7 @@ class Trainer(object):
 
     def train_model(self):
         say('\n\nTRAINING A MODEL\n')
-        model_api = ModelAPI(argv=self.argv,
+        model_api = self.model_api = ModelAPI(argv=self.argv,
                              emb=self.trainable_emb,
                              vocab_word=self.vocab_word,
                              vocab_label=self.vocab_label)
@@ -137,18 +138,10 @@ class Trainer(object):
                             untrainable_emb=self.untrainable_emb)
 
 
-class BasicTrainer(Trainer):
-
-    def __init__(self, argv):
-        super(BasicTrainer, self).__init__(argv)
-        self.preprocessor = Preprocessor(argv)
-
-
 class RankingTrainer(Trainer):
 
-    def __init__(self, argv):
-        super(RankingTrainer, self).__init__(argv)
-        self.preprocessor = RankingPreprocessor(argv)
+    def __init__(self, argv, preprocessor):
+        super(RankingTrainer, self).__init__(argv, preprocessor)
 
     def _setup_samples(self):
         self.preprocessor.set_sample_factory(self.vocab_word, self.vocab_label)
@@ -176,8 +169,43 @@ class RankingTrainer(Trainer):
                             untrainable_emb=self.untrainable_emb)
 
 
+class RerankingTrainer(Trainer):
+
+    def __init__(self, argv, preprocessor):
+        super(RerankingTrainer, self).__init__(argv, preprocessor)
+
+    def train_model(self):
+        say('\n\nTRAINING A RERANKING MODEL\n')
+        model_api = self.model_api = RerankingModelAPI(argv=self.argv,
+                             emb=self.trainable_emb,
+                             vocab_word=self.vocab_word,
+                             vocab_label=self.vocab_label)
+
+        model_api.compile(train_sample_shared=self.train_samples)
+
+        model_api.train_all(argv=self.argv,
+                            train_batch_index=self.train_indices,
+                            dev_samples=self.dev_samples,
+                            test_samples=self.test_samples,
+                            untrainable_emb=self.untrainable_emb)
+
+        dev_n_best_lists = self.create_n_best_lists(self.dev_samples)
+        for list in dev_n_best_lists[0]:
+            print list
+
+    def create_n_best_lists(self, samples):
+        return self.model_api.predict_n_best_all(samples)
+
+
+def select_trainer(argv):
+    if argv.model == 'base':
+        return Trainer(argv, Preprocessor(argv))
+    elif argv.model == 'rank':
+        return RankingTrainer(argv, RankingPreprocessor(argv))
+    return RerankingTrainer(argv, Preprocessor(argv))
+
+
 def main(argv):
-    gen_trainer = BasicTrainer if argv.model == 'base' else RankingTrainer
-    trainer = gen_trainer(argv)
+    trainer = select_trainer(argv)
     trainer.setup_training()
     trainer.train_model()

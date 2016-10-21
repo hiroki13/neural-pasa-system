@@ -3,7 +3,6 @@ import time
 import gzip
 import math
 import cPickle as pickle
-from copy import deepcopy
 
 import numpy as np
 import theano
@@ -107,12 +106,6 @@ class ModelAPI(object):
                 print '\n  DEV\n\t',
                 dev_results, dev_results_prob = self.predict_all(dev_samples)
                 dev_f1 = self.eval_all(dev_results, dev_samples)
-
-                all_prd_indices = self.create_prd_index_lists(dev_samples)
-                n_best_lists = self.create_n_best_lists(all_prob_lists=dev_results_prob, all_prd_indices=all_prd_indices)
-                gold_labels = self.create_gold_labels(dev_samples)
-                self.eval_n_best_list(n_best_lists, gold_labels)
-
                 if best_dev_f1 < dev_f1:
                     best_dev_f1 = dev_f1
                     f1_history[epoch+1] = [best_dev_f1]
@@ -204,19 +197,6 @@ class ModelAPI(object):
         return self.decoder.decode_argmax(prob_lists, prd_indices)
 
     @staticmethod
-    def create_prd_index_lists(samples):
-        return [sample.prd_indices for sample in samples]
-
-    @staticmethod
-    def create_gold_labels(samples):
-        return [sample.label_ids for sample in samples]
-
-    def create_n_best_lists(self, all_prob_lists, all_prd_indices, N=2):
-        say('\n\n  Create N-best list\n')
-        assert len(all_prob_lists) == len(all_prd_indices)
-        return self.decoder.decode_n_best(all_prob_lists=all_prob_lists, all_prd_indices=all_prd_indices, N=N)
-
-    @staticmethod
     def eval_all(results, samples):
         pred_eval = Eval()
         assert len(results) == len(samples)
@@ -226,18 +206,6 @@ class ModelAPI(object):
             pred_eval.update_results(batch_y_hat=result, batch_y=sample.label_ids)
         pred_eval.show_results()
         return pred_eval.all_f1
-
-    @staticmethod
-    def eval_n_best_list(n_best_lists, gold_labels):
-        list_eval = Eval()
-        assert len(n_best_lists) == len(gold_labels)
-        for n_best_list, batch_y in zip(n_best_lists, gold_labels):
-            if len(batch_y) == 0:
-                continue
-            best_f1_list = list_eval.select_best_f1_list(n_best_list=n_best_list, batch_y=batch_y)
-            list_eval.update_results(batch_y_hat=best_f1_list, batch_y=batch_y)
-        list_eval.show_results()
-        say('\n\n')
 
     def output_results(self, fn, samples):
         ###########
@@ -479,3 +447,83 @@ class RankingModelAPI(ModelAPI):
 
         return pred_eval.all_f1
 
+
+class RerankingModelAPI(ModelAPI):
+
+    def __init__(self, argv, emb, vocab_word, vocab_label):
+        super(RerankingModelAPI, self).__init__(argv, emb, vocab_word, vocab_label)
+        self.rerank_model = None
+
+    def set_model(self):
+        self.rerank_model = Model(argv=self.argv,
+                           emb=self.emb,
+                           n_vocab=self.vocab_word.size(),
+                           n_labels=self.vocab_label.size())
+
+    def compile_rerank_model(self):
+        # x: 1D: batch * n_words, 2D: 5 + window + 1; elem=word id
+        # y: 1D: batch * n_words; elem=label id
+        self.model.compile(x_w=T.imatrix('x_w'),
+                           x_p=T.ivector('x_p'),
+                           y=T.ivector('y'),
+                           n_words=T.iscalar('n_words'))
+
+    def set_decoder(self):
+        self.decoder = Decoder()
+
+    def set_train_f(self, samples):
+        index = T.iscalar('index')
+        bos = T.iscalar('bos')
+        eos = T.iscalar('eos')
+
+        model = self.model
+        self.train = theano.function(inputs=[index, bos, eos],
+                                     outputs=[model.y_pred, model.y_gold, model.nll],
+                                     updates=model.update,
+                                     givens={
+                                         model.inputs[0]: samples[0][bos: eos],
+                                         model.inputs[1]: samples[1][bos: eos],
+                                         model.inputs[2]: samples[2][bos: eos],
+                                         model.inputs[3]: samples[3][index],
+                                     }
+                                     )
+
+    def set_predict_f(self):
+        model = self.model
+        self.predict = theano.function(inputs=model.inputs,
+                                       outputs=model.y_prob,
+                                       on_unused_input='ignore'
+                                       )
+
+    def predict_n_best_all(self, samples):
+        _, results_prob = self.predict_all(samples)
+        all_prd_indices = self.create_prd_index_lists(samples)
+        n_best_lists = self.create_n_best_lists(all_prob_lists=results_prob, all_prd_indices=all_prd_indices)
+        gold_labels = self.create_gold_labels(samples)
+        self.eval_n_best_list(n_best_lists, gold_labels)
+        return n_best_lists
+
+    @staticmethod
+    def create_prd_index_lists(samples):
+        return [sample.prd_indices for sample in samples]
+
+    @staticmethod
+    def create_gold_labels(samples):
+        return [sample.label_ids for sample in samples]
+
+    def create_n_best_lists(self, all_prob_lists, all_prd_indices, N=2):
+        say('\n\n  Create N-best list\n')
+        assert len(all_prob_lists) == len(all_prd_indices)
+        return self.decoder.decode_n_best(all_prob_lists=all_prob_lists, all_prd_indices=all_prd_indices, N=N)
+
+    @staticmethod
+    def eval_n_best_list(n_best_lists, gold_labels):
+        list_eval = Eval()
+        assert len(n_best_lists) == len(gold_labels)
+        for n_best_list, batch_y in zip(n_best_lists, gold_labels):
+            if len(batch_y) == 0:
+                continue
+            best_f1_list = list_eval.select_best_f1_list(n_best_list=n_best_list, batch_y=batch_y)
+            list_eval.update_results(batch_y_hat=best_f1_list, batch_y=batch_y)
+        list_eval.show_results()
+        say('\n\n')
