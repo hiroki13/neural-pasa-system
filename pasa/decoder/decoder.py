@@ -51,7 +51,7 @@ class Decoder(object):
         sorted_probs = self.sort_probs(best_list, prob_lists)
         n_best_list = [best_list]
         n_th_list = deepcopy(best_list)
-        for n in xrange(N):
+        for n in xrange(N-1):
             if len(sorted_probs) == 0:
                 return n_best_list
             n_th_list = self.create_n_th_list(n_th_list, sorted_probs)

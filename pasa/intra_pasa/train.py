@@ -189,12 +189,7 @@ class NBestTrainer(Trainer):
                             test_samples=self.test_samples,
                             untrainable_emb=self.untrainable_emb)
 
-        dev_n_best_lists = self.create_n_best_lists(self.dev_samples)
-        for list in dev_n_best_lists[0]:
-            print list
-
-    def train_each_model(self):
-        return
+#        dev_n_best_lists = self.create_n_best_lists(self.dev_samples)
 
     def create_n_best_lists(self, samples):
         return self.model_api.predict_n_best_lists(samples)
