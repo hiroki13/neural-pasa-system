@@ -5,7 +5,7 @@ from abc import ABCMeta, abstractmethod
 from ..utils.io_utils import say
 from ..utils.preprocessor import Preprocessor, RankingPreprocessor
 from ..ling.vocab import Vocab, PAD, UNK
-from ..model.model_api import ModelAPI, RankingModelAPI, RerankingModelAPI
+from ..model.model_api import ModelAPI, RankingModelAPI, NBestModelAPI
 
 
 class Trainer(object):
@@ -125,9 +125,9 @@ class Trainer(object):
     def train_model(self):
         say('\n\nTRAINING A MODEL\n')
         model_api = self.model_api = ModelAPI(argv=self.argv,
-                             emb=self.trainable_emb,
-                             vocab_word=self.vocab_word,
-                             vocab_label=self.vocab_label)
+                                              emb=self.trainable_emb,
+                                              vocab_word=self.vocab_word,
+                                              vocab_label=self.vocab_label)
 
         model_api.compile(train_sample_shared=self.train_samples)
 
@@ -169,17 +169,17 @@ class RankingTrainer(Trainer):
                             untrainable_emb=self.untrainable_emb)
 
 
-class RerankingTrainer(Trainer):
+class NBestTrainer(Trainer):
 
     def __init__(self, argv, preprocessor):
-        super(RerankingTrainer, self).__init__(argv, preprocessor)
+        super(NBestTrainer, self).__init__(argv, preprocessor)
 
     def train_model(self):
-        say('\n\nTRAINING A RERANKING MODEL\n')
-        model_api = self.model_api = RerankingModelAPI(argv=self.argv,
-                             emb=self.trainable_emb,
-                             vocab_word=self.vocab_word,
-                             vocab_label=self.vocab_label)
+        say('\n\nTRAINING An N-Best MODEL\n')
+        model_api = self.model_api = NBestModelAPI(argv=self.argv,
+                                                   emb=self.trainable_emb,
+                                                   vocab_word=self.vocab_word,
+                                                   vocab_label=self.vocab_label)
 
         model_api.compile(train_sample_shared=self.train_samples)
 
@@ -193,8 +193,11 @@ class RerankingTrainer(Trainer):
         for list in dev_n_best_lists[0]:
             print list
 
+    def train_each_model(self):
+        return
+
     def create_n_best_lists(self, samples):
-        return self.model_api.predict_n_best_all(samples)
+        return self.model_api.predict_n_best_lists(samples)
 
 
 def select_trainer(argv):
@@ -202,7 +205,7 @@ def select_trainer(argv):
         return Trainer(argv, Preprocessor(argv))
     elif argv.model == 'rank':
         return RankingTrainer(argv, RankingPreprocessor(argv))
-    return RerankingTrainer(argv, Preprocessor(argv))
+    return NBestTrainer(argv, Preprocessor(argv))
 
 
 def main(argv):
