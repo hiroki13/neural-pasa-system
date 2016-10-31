@@ -9,7 +9,7 @@ import theano
 import theano.tensor as T
 
 from model import Model, RankingModel
-from ..utils.io_utils import say
+from ..utils.io_utils import say, dump_data
 from ..utils.eval import Eval
 from ..decoder.decoder import Decoder
 from ..utils.nbl_factory import NBestListFactory
@@ -498,9 +498,6 @@ class NBestModelAPI(ModelAPI):
                         self.save_config('config.intra.layers-%d.window-%d.reg-%f' %
                                          (argv.layers, argv.window, argv.reg))
 
-                    if argv.result:
-                        self.output_results('result.dev.txt', dev_samples)
-
             ########
             # Test #
             ########
@@ -515,6 +512,9 @@ class NBestModelAPI(ModelAPI):
                         f1_history[epoch+1].append(test_f1)
                     else:
                         f1_history[epoch+1] = [test_f1]
+
+                    if argv.result:
+                        dump_data(test_n_best_lists, 'best-%d.target-%d' % (self.argv.n_best, self.argv.target))
 
             if untrainable_emb is not None:
                 self.model.emb_layer.word_emb.set_value(trainable_emb)

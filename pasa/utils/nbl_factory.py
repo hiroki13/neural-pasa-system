@@ -1,5 +1,6 @@
 from io_utils import say
 from eval import Eval
+from ..ling.n_best_list import NBestList
 
 
 class NBestListFactory(object):
@@ -11,7 +12,8 @@ class NBestListFactory(object):
         say('\n\n  Create N-best list\n')
         all_prd_indices = self._extract_prd_indices(samples)
         assert len(all_prob_lists) == len(all_prd_indices)
-        return decoder.decode_n_best(all_prob_lists=all_prob_lists, all_prd_indices=all_prd_indices, N=self.N)
+        n_best_lists = decoder.decode_n_best(all_prob_lists=all_prob_lists, all_prd_indices=all_prd_indices, N=self.N)
+        samples = [sample for sample in samples if len(sample.prd_indices)]
 
     def eval_n_best_list(self, samples, n_best_lists):
         list_eval = Eval()

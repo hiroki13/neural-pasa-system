@@ -63,6 +63,7 @@ if __name__ == '__main__':
     parser.add_argument('--reg', type=float, default=0.0001, help='learning rate')
     parser.add_argument('--init_emb', default=None, help='Initial embedding to be loaded')
     parser.add_argument('--n_best', type=int, default=5, help='How many best lists are created')
+    parser.add_argument('--target', type=int, default=0, help='Jack Knife')
 
     argv = parser.parse_args()
     print

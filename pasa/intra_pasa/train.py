@@ -2,7 +2,7 @@ import numpy as np
 import theano
 
 from abc import ABCMeta, abstractmethod
-from ..utils.io_utils import say
+from ..utils.io_utils import say, dump_data, load_data
 from ..utils.preprocessor import Preprocessor, RankingPreprocessor
 from ..ling.vocab import Vocab, PAD, UNK
 from ..model.model_api import ModelAPI, RankingModelAPI, NBestModelAPI
@@ -195,11 +195,84 @@ class NBestTrainer(Trainer):
         return self.model_api.predict_n_best_lists(samples)
 
 
+class JackKnifeTrainer(Trainer):
+
+    def __init__(self, argv, preprocessor):
+        super(JackKnifeTrainer, self).__init__(argv, preprocessor)
+
+    def _load_corpus_set(self):
+        self.preprocessor.set_corpus_loader()
+
+        train_set = load_data(self.argv.train_data)
+        target = self.argv.target
+        train_corpus = []
+        for i, one_train in enumerate(train_set):
+            if i == target:
+                continue
+            train_corpus.extend(one_train)
+
+        dev_corpus = self.preprocessor.corpus_loader.load_corpus(path=self.argv.dev_data)
+        return train_corpus, dev_corpus, train_set[target]
+
+    def train_model(self):
+        say('\n\nTRAINING An N-Best MODEL\n')
+        model_api = self.model_api = NBestModelAPI(argv=self.argv,
+                                                   emb=self.trainable_emb,
+                                                   vocab_word=self.vocab_word,
+                                                   vocab_label=self.vocab_label)
+
+        model_api.compile(train_sample_shared=self.train_samples)
+
+        model_api.train_all(argv=self.argv,
+                            train_batch_index=self.train_indices,
+                            dev_samples=self.dev_samples,
+                            test_samples=self.test_samples,
+                            untrainable_emb=self.untrainable_emb)
+
+    def create_n_best_lists(self, samples):
+        return self.model_api.predict_n_best_lists(samples)
+
+
+class TrainCorpusSeparator(Trainer):
+
+    def __init__(self, argv, preprocessor):
+        super(TrainCorpusSeparator, self).__init__(argv, preprocessor)
+
+    def setup_training(self):
+        say('\n\nSeparating the training set\n')
+        self._setup_corpus()
+        train_set = self.separate_train_data(10)
+        self.save_train_samples(train_set)
+
+    def train_model(self):
+        pass
+
+    def separate_train_data(self, n_seps):
+        train_corpus = self.corpus_set[0]
+        n_samples = len(train_corpus)
+        slide = n_samples / n_seps
+        separated_train_set = []
+        for i in xrange(n_seps-1):
+            one_train = train_corpus[i * slide: (i+1) * slide]
+            separated_train_set.append(one_train)
+        one_train = train_corpus[(n_seps-1) * slide:]
+        separated_train_set.append(one_train)
+        return separated_train_set
+
+    @staticmethod
+    def save_train_samples(separated_train_set):
+        dump_data(separated_train_set, 'train-set.separated-%d' % len(separated_train_set))
+
+
 def select_trainer(argv):
     if argv.model == 'base':
         return Trainer(argv, Preprocessor(argv))
     elif argv.model == 'rank':
         return RankingTrainer(argv, RankingPreprocessor(argv))
+    elif argv.model == 'jack':
+        return JackKnifeTrainer(argv, Preprocessor(argv))
+    elif argv.model == 'sep':
+        return TrainCorpusSeparator(argv, Preprocessor(argv))
     return NBestTrainer(argv, Preprocessor(argv))
 
 

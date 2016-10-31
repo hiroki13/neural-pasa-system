@@ -30,10 +30,13 @@ class Preprocessor(object):
     def create_sample_set(self, corpus_set):
         # samples: 1D: n_sents; Sample
         train_corpus, dev_corpus, test_corpus = corpus_set
-        train_samples = self.sample_factory.create_samples(train_corpus)
-        dev_samples = self.sample_factory.create_samples(dev_corpus, test=True)
-        test_samples = self.sample_factory.create_samples(test_corpus, test=True)
+        train_samples = self.create_samples(train_corpus, test=False)
+        dev_samples = self.create_samples(dev_corpus, test=True)
+        test_samples = self.create_samples(test_corpus, test=True)
         return train_samples, dev_samples, test_samples
+
+    def create_samples(self, corpus, test):
+        return self.sample_factory.create_samples(corpus, test)
 
     def create_shared_samples(self, samples):
         return self.sample_factory.create_shared_batch_samples(samples)
