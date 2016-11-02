@@ -69,6 +69,10 @@ class Vocab(object):
         word_freqs = self.get_word_freqs(corpus, min_unit)
         self.add_vocab(word_freqs, vocab_cut_off)
 
+    def add_vocab_from_lists(self, corpus, vocab_cut_off=0):
+        word_freqs = self.get_word_freqs_in_lists(corpus)
+        self.add_vocab(word_freqs, vocab_cut_off)
+
     @staticmethod
     def get_word_freqs(corpus, min_unit='word'):
         word_freqs = defaultdict(int)
@@ -80,6 +84,14 @@ class Vocab(object):
                     else:
                         for c in w.chars:
                             word_freqs[c] += 1
+        return word_freqs
+
+    @staticmethod
+    def get_word_freqs_in_lists(corpus):
+        word_freqs = defaultdict(int)
+        for n_best_list in corpus:
+            for w in n_best_list.words:
+                word_freqs[w.form] += 1
         return word_freqs
 
     def size(self):

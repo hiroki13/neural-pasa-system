@@ -3,11 +3,11 @@ import theano
 import theano.tensor as T
 
 from ..utils.io_utils import say
-from ..nn.rnn import RNNLayers
+from ..nn.rnn import RNNLayers, GridNetwork
 from ..nn.nn_utils import L2_sqr, hinge_loss
 from ..nn.optimizers import ada_grad, ada_delta, adam, sgd
 from ..nn.seq_labeling import Layer, MEMMLayer, CRFLayer, RankingLayer
-from ..nn.embedding import EmbeddingLayer
+from ..nn.embedding import EmbeddingLayer, RerankingEmbeddingLayer
 
 
 class Model(object):
@@ -223,61 +223,32 @@ class RankingModel(Model):
         return nll, cost
 
 
-class RerankingModel(object):
+class RerankingModel(Model):
 
     def __init__(self, argv, emb, n_vocab):
+        super(RerankingModel, self).__init__(argv, emb, n_vocab, None)
 
-        self.argv = argv
-        self.emb = emb
-        self.n_vocab = n_vocab
-        self.dropout = None
-
-        ###################
-        # Input variables #
-        ###################
-        self.inputs = None
-
-        ####################
-        # Output variables #
-        ####################
-        self.y_prob = None
-        self.y_gold = None
-        self.y_pred = None
-        self.nll = None
-        self.cost = None
-
-        ##############
-        # Parameters #
-        ##############
-        self.emb_layer = None
-        self.hidden_layers = None
-        self.output_layer = None
-        self.layers = []
-        self.params = []
-        self.update = None
-
-    def compile(self, x_w, x_p, x_l, x_s, y):
+    def compile(self, x_w, x_p, x_l, y):
         """
-        :param x_w: 1D: batch, 2D: n_lists, 3D: n_prds, 4D: n_words, 5D: 5+window; word id
-        :param x_p: 1D: batch, 2D: n_lists, 3D: n_prds, 4D: n_words; 0/1
+        :param x_w: 1D: batch, 2D: n_prds, 3D: n_words, 4D: 5+window; word id
+        :param x_p: 1D: batch, 2D: n_prds, 3D: n_words; 0/1
         :param x_l: 1D: batch, 2D: n_lists, 3D: n_prds, 4D: n_words; label id
-        :param x_s: 1D: batch, 2D: n_lists, 3D: n_prds, 4D: n_words; score
         :param y: 1D: batch; index of the best f1 list
         :return:
         """
         argv = self.argv
         batch_size = x_w.shape[0]
 
-        self.inputs = [x_w, x_p, x_l, x_s, y]
+        self.inputs = [x_w, x_p, x_l, y]
 
         self.dropout = theano.shared(np.float32(argv.dropout).astype(theano.config.floatX))
-        self.set_layers(x_w, self.emb)
+        self.set_layers(self.emb)
         self.set_params()
 
         ############
         # Networks #
         ############
-        x = self.emb_layer_forward(x_w, x_p, batch_size)
+        x = self.emb_layer_forward(x_w, x_p, x_l, batch_size)
         h = self.hidden_layer_forward(x)
         h = self.output_layer_forward(h)
 
@@ -293,3 +264,43 @@ class RerankingModel(object):
         ############
         self.nll, self.cost = self.objective_f(h=h, reg=argv.reg)
         self.update = self.optimize(cost=self.cost, opt=argv.opt, lr=argv.lr)
+
+    def set_layers(self, init_emb):
+        argv = self.argv
+        dim_emb = argv.dim_emb if init_emb is None else len(init_emb[0])
+        dim_posit = argv.dim_posit
+        dim_in = dim_emb * (5 + argv.window) + (2 * dim_posit)
+        dim_h = argv.dim_hidden
+        n_vocab = self.n_vocab
+        unit = argv.unit
+        fix = argv.fix
+        n_layers = argv.layers
+
+        self.emb_layer = RerankingEmbeddingLayer(n_vocab=n_vocab, dim_emb=dim_emb, init_emb=init_emb,
+                                                 dim_posit=dim_posit, fix=fix)
+        self.hidden_layers = GridNetwork(unit=unit, depth=n_layers, n_in=dim_in, n_h=dim_h)
+        self.output_layer = Layer(n_i=dim_h)
+
+        self.layers.append(self.emb_layer)
+        self.layers.extend(self.hidden_layers.layers)
+        self.layers.append(self.output_layer)
+        say('No. of rnn layers: %d\n' % (len(self.layers)-3))
+
+    def emb_layer_forward(self, x_w, x_p, x_l, batch):
+        """
+        :param x_w: 1D: batch, 2D: n_prds, 3D: n_words, 4D: 5+window; word id
+        :param x_p: 1D: batch, 2D: n_prds, 3D: n_words; 0/1
+        :param x_l: 1D: batch, 2D: n_lists, 3D: n_prds, 4D: n_words; label id
+        :return: 1D: batch * n_lists, 2D: n_prds, 3D: n_words, 4D: dim_in (dim_emb * (5 + window + 1))
+        """
+        x_w = self.emb_layer.forward_word(x_w).reshape((x_w.shape[0], x_w.shape[1], x_w.shape[2], -1))
+        x_p = self.emb_layer.forward_posit(x_p)
+        x_l = self.emb_layer.forward_label(x_l)
+
+        # 1D: batch, 2D: n_prds, 3D: n_words, 4D: dim_phi
+        x = T.concatenate([x_w, x_p], axis=3)
+        x = x.dimshuffle(0, 'x', 1, 2, 3)
+        # 1D: batch, 2D: n_lists, 3D: n_prds, 4D: n_words, 5D: dim_phi
+        x = T.repeat(x, x_l.shape[1], axis=1)
+        x = T.concatenate([x, x_l], axis=4)
+        return x.reshape((x.shape[0] * x.shape[1], x.shape[2], x.shape[3], x.shape[4]))

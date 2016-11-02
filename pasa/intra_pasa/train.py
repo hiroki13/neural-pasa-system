@@ -1,7 +1,7 @@
 import numpy as np
 import theano
 
-from abc import ABCMeta, abstractmethod
+from abc import ABCMeta
 from ..utils.io_utils import say, dump_data, load_data
 from ..utils.preprocessor import Preprocessor, RankingPreprocessor
 from ..ling.vocab import Vocab, PAD, UNK
@@ -34,16 +34,16 @@ class Trainer(object):
         self._setup_label()
         self._setup_samples()
 
+    def _setup_corpus(self):
+        self.corpus_set = self._load_corpus_set()
+        self._show_corpus_stats(self.corpus_set)
+
     def _load_corpus_set(self):
         self.preprocessor.set_corpus_loader()
         return self.preprocessor.load_corpus_set()
 
     def _show_corpus_stats(self, corpus_set):
         self.preprocessor.show_corpus_stats(corpus_set)
-
-    def _setup_corpus(self):
-        self.corpus_set = self._load_corpus_set()
-        self._show_corpus_stats(self.corpus_set)
 
     def _setup_vocab_word(self):
         vocab_word, emb = self.preprocessor.load_init_emb()
@@ -262,6 +262,54 @@ class TrainCorpusSeparator(Trainer):
     @staticmethod
     def save_train_samples(separated_train_set):
         dump_data(separated_train_set, 'train-set.separated-%d' % len(separated_train_set))
+
+
+class RerankingTrainer(Trainer):
+
+    def __init__(self, argv, preprocessor):
+        super(RerankingTrainer, self).__init__(argv, preprocessor)
+
+    def setup_training(self):
+        say('\n\nSETTING UP AN INTRA-SENTENTIAL PASA TRAINING SETTING\n')
+        self._setup_corpus()
+        self._setup_vocab_word()
+        self._setup_label()
+        self._setup_samples()
+
+    def _setup_corpus(self):
+        self.corpus_set = self._load_corpus_set()
+        self._show_corpus_stats(self.corpus_set)
+
+    def _load_corpus_set(self):
+        train_corpus = load_data(self.argv.train_data)
+        return train_corpus, None, None
+
+    def _show_corpus_stats(self, corpus_set):
+        pass
+
+    def _setup_samples(self):
+        self.preprocessor.set_sample_factory(self.vocab_word, self.vocab_label)
+        sample_set = self.preprocessor.create_sample_set(self.corpus_set)
+        train_sample_batched = self.preprocessor.create_shared_samples(sample_set[0])
+
+        self.train_samples = train_sample_batched
+        self.dev_samples = sample_set[1]
+        self.test_samples = sample_set[2]
+
+    def train_model(self):
+        say('\n\nTRAINING An Reranking MODEL\n')
+        model_api = self.model_api = NBestModelAPI(argv=self.argv,
+                                                   emb=self.trainable_emb,
+                                                   vocab_word=self.vocab_word,
+                                                   vocab_label=self.vocab_label)
+
+        model_api.compile(train_sample_shared=self.train_samples)
+
+        model_api.train_all(argv=self.argv,
+                            train_batch_index=self.train_indices,
+                            dev_samples=self.dev_samples,
+                            test_samples=self.test_samples,
+                            untrainable_emb=self.untrainable_emb)
 
 
 def select_trainer(argv):

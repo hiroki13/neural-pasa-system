@@ -2,7 +2,7 @@ import numpy as np
 import theano
 
 from abc import ABCMeta, abstractmethod
-from ..ling.sample import Sample, RankingSample
+from ..ling.sample import Sample, RankingSample, RerankingSample
 
 
 class SampleFactory(object):
@@ -161,3 +161,72 @@ class RankingSampleFactory(SampleFactory):
         if prev_n_words != n_words or len(y) >= batch_size:
             return True
         return False
+
+
+class RerankingSampleFactory(SampleFactory):
+
+    def create_sample(self, sent):
+        return RerankingSample(n_best_list=sent, window=self.window)
+
+    def create_samples(self, corpus, test=False):
+        """
+        :param corpus: 1D: n_docs, 2D: n_sents, 3D: n_words; elem=Word
+        :param test: whether the corpus is for dev or test
+        :return: samples: 1D: n_samples; Sample
+        """
+        if corpus is None:
+            return None
+
+        # 1D: n_docs * n_sents, 2D: n_words; elem=Word
+        if test is False:
+            corpus = self._sort_by_n_words(corpus)
+
+        samples = []
+        for sent in corpus:
+            sample = self.create_sample(sent=sent)
+            sample.set_params(self.vocab_word, self.vocab_label)
+            samples.append(sample)
+
+        return samples
+
+    def create_shared_batch_samples(self, samples):
+        """
+        :param samples: 1D: n_sents; Sample
+        """
+        batches = []
+        batch = [[] for i in xrange(4)]
+
+        samples = [sample for sample in samples if sample.n_prds > 0]
+        prev_n_prds = samples[0].n_prds
+        prev_n_words = samples[0].n_words
+
+        for sample in samples:
+            if self.is_batch_boundary(sample.n_words, prev_n_words,
+                                      sample.n_prds, prev_n_prds,
+                                      len(batch[-1]), self.batch_size):
+                prev_n_prds = sample.n_prds
+                prev_n_words = sample.n_words
+                batches.append(batch)
+                batch = [[] for i in xrange(4)]
+
+            batch[0].append(sample.x_w)
+            batch[1].append(sample.x_p)
+            batch[2].append(sample.x_l)
+            batch[3].append(sample.y)
+
+        if len(batch[0]) > 0:
+            batches.append(batch)
+
+        return batches
+
+    @staticmethod
+    def is_batch_boundary(n_words, prev_n_words, n_prds, prev_n_prds, n_batches, batch_size):
+        if prev_n_words != n_words or n_prds != prev_n_prds or n_batches == batch_size:
+            return True
+        return False
+
+    @staticmethod
+    def _sort_by_n_words(corpus):
+        np.random.shuffle(corpus)
+        corpus.sort(key=lambda s: len(s.words))
+        return corpus
