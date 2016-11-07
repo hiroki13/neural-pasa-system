@@ -8,7 +8,7 @@ import numpy as np
 import theano
 import theano.tensor as T
 
-from model import Model, RankingModel
+from model import Model, RankingModel, RerankingModel
 from ..utils.io_utils import say, dump_data
 from ..utils.eval import Eval
 from ..decoder.decoder import Decoder
@@ -551,15 +551,62 @@ class RerankingModelAPI(ModelAPI):
         super(RerankingModelAPI, self).__init__(argv, emb, vocab_word, vocab_label)
 
     def set_model(self):
-        self.model = Model(argv=self.argv,
-                           emb=self.emb,
-                           n_vocab=self.vocab_word.size(),
-                           n_labels=self.vocab_label.size())
+        self.model = RerankingModel(argv=self.argv,
+                                    emb=self.emb,
+                                    n_vocab=self.vocab_word.size())
 
     def compile_model(self):
-        # x: 1D: batch * n_words, 2D: 5 + window + 1; elem=word id
+        # x_w: 1D: batch, 2D: n_prds, 3D: n_words, 4D: 5 + window; elem=word id
+        # x_p: 1D: batch, 2D: n_prds, 3D: n_words; elem=posit id
+        # x_l: 1D: batch, 2D: n_lists, 3D: n_prds, 4D: n_words; elem=label id
         # y: 1D: batch * n_words; elem=label id
-        self.model.compile(x_w=T.imatrix('x_w'),
-                           x_p=T.ivector('x_p'),
-                           y=T.ivector('y'),
-                           n_words=T.iscalar('n_words'))
+        self.model.compile(x_w=T.itensor4('x_w'),
+                           x_p=T.itensor3('x_p'),
+                           x_l=T.itensor4('x_l'),
+                           y=T.ivector('y'))
+
+    def set_train_f(self, samples):
+        model = self.model
+        self.train = theano.function(inputs=model.inputs,
+                                     outputs=[model.h],
+                                     on_unused_input='ignore'
+                                     )
+
+    def set_predict_f(self):
+        model = self.model
+        self.predict = theano.function(inputs=model.inputs,
+                                       outputs=model.y_prob,
+                                       on_unused_input='ignore'
+                                       )
+
+    def train_all(self, argv, train_samples, dev_samples, test_samples, untrainable_emb=None):
+        say('\n\nTRAINING START\n\n')
+
+        for epoch in xrange(argv.epoch):
+            dropout_p = np.float32(argv.dropout).astype(theano.config.floatX)
+            self.model.dropout.set_value(dropout_p)
+
+            say('\nEpoch: %d\n' % (epoch + 1))
+            print '  TRAIN\n\t',
+
+            self.train_each(train_samples)
+
+    def train_each(self, train_samples):
+        tr_indices = range(len(train_samples))
+#        np.random.shuffle(tr_indices)
+        train_eval = Eval()
+        start = time.time()
+
+        for index, b_index in enumerate(tr_indices):
+            if index != 0 and index % 1000 == 0:
+                print index,
+                sys.stdout.flush()
+
+            x_w, x_p, x_l, y = train_samples[b_index]
+            nll = self.train(x_w, x_p, x_l, y)
+            print nll
+            exit()
+            assert not math.isnan(nll), 'NLL is NAN: Index: %d' % index
+
+        print '\tTime: %f' % (time.time() - start)
+        train_eval.show_results()

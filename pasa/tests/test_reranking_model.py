@@ -14,7 +14,7 @@ random.seed(0)
 def main(_argv):
     trainer = RerankingTrainer(_argv, RerankingPreprocessor(_argv))
     trainer.setup_training()
-    print trainer.train_samples[0][-1]
+    trainer.train_model()
     exit()
     test_grid_propagate(trainer.train_samples[0])
 

@@ -3,7 +3,7 @@ import theano
 import theano.tensor as T
 
 from ..utils.io_utils import say
-from ..nn.rnn import RNNLayers, GridNetwork
+from ..nn.rnn import RNNLayers, GridNetwork, ConnectedLayer
 from ..nn.nn_utils import L2_sqr, hinge_loss
 from ..nn.optimizers import ada_grad, ada_delta, adam, sgd
 from ..nn.seq_labeling import Layer, MEMMLayer, CRFLayer, RankingLayer
@@ -237,8 +237,6 @@ class RerankingModel(Model):
         :return:
         """
         argv = self.argv
-        batch_size = x_w.shape[0]
-
         self.inputs = [x_w, x_p, x_l, y]
 
         self.dropout = theano.shared(np.float32(argv.dropout).astype(theano.config.floatX))
@@ -248,7 +246,11 @@ class RerankingModel(Model):
         ############
         # Networks #
         ############
-        x = self.emb_layer_forward(x_w, x_p, x_l, batch_size)
+        x = self.emb_layer_forward(x_w, x_p, x_l)
+        h = self.hidden_layer_forward(x)
+        h = self.h = self.output_layer_forward(h)
+
+        """
         h = self.hidden_layer_forward(x)
         h = self.output_layer_forward(h)
 
@@ -264,34 +266,41 @@ class RerankingModel(Model):
         ############
         self.nll, self.cost = self.objective_f(h=h, reg=argv.reg)
         self.update = self.optimize(cost=self.cost, opt=argv.opt, lr=argv.lr)
+        """
 
     def set_layers(self, init_emb):
         argv = self.argv
         dim_emb = argv.dim_emb if init_emb is None else len(init_emb[0])
         dim_posit = argv.dim_posit
-        dim_in = dim_emb * (5 + argv.window) + (2 * dim_posit)
+        dim_label = argv.dim_posit
+        dim_in = dim_emb * (5 + argv.window) + dim_posit + dim_label
         dim_h = argv.dim_hidden
         n_vocab = self.n_vocab
         unit = argv.unit
         fix = argv.fix
         n_layers = argv.layers
 
-        self.emb_layer = RerankingEmbeddingLayer(n_vocab=n_vocab, dim_emb=dim_emb, init_emb=init_emb,
-                                                 dim_posit=dim_posit, fix=fix)
-        self.hidden_layers = GridNetwork(unit=unit, depth=n_layers, n_in=dim_in, n_h=dim_h)
-        self.output_layer = Layer(n_i=dim_h)
+        self.emb_layer = RerankingEmbeddingLayer(init_emb=init_emb,
+                                                 n_vocab=n_vocab, dim_emb=dim_emb,
+                                                 n_posit=2, dim_posit=dim_posit,
+                                                 n_labels=5, dim_label=dim_label,
+                                                 fix=fix)
+        self.hidden_connected_layer = ConnectedLayer(n_i=dim_in, n_h=dim_h)
+        self.hidden_layers = GridNetwork(unit=unit, depth=n_layers, n_in=dim_h, n_h=dim_h)
+        self.output_layer = ConnectedLayer(n_i=dim_h, n_h=1)
 
         self.layers.append(self.emb_layer)
+        self.layers.append(self.hidden_connected_layer)
         self.layers.extend(self.hidden_layers.layers)
         self.layers.append(self.output_layer)
         say('No. of rnn layers: %d\n' % (len(self.layers)-3))
 
-    def emb_layer_forward(self, x_w, x_p, x_l, batch):
+    def emb_layer_forward(self, x_w, x_p, x_l):
         """
         :param x_w: 1D: batch, 2D: n_prds, 3D: n_words, 4D: 5+window; word id
         :param x_p: 1D: batch, 2D: n_prds, 3D: n_words; 0/1
         :param x_l: 1D: batch, 2D: n_lists, 3D: n_prds, 4D: n_words; label id
-        :return: 1D: batch * n_lists, 2D: n_prds, 3D: n_words, 4D: dim_in (dim_emb * (5 + window + 1))
+        :return: 1D: batch * n_lists, 2D: n_prds, 3D: n_words, 4D: dim_in
         """
         x_w = self.emb_layer.forward_word(x_w).reshape((x_w.shape[0], x_w.shape[1], x_w.shape[2], -1))
         x_p = self.emb_layer.forward_posit(x_p)
@@ -299,8 +308,26 @@ class RerankingModel(Model):
 
         # 1D: batch, 2D: n_prds, 3D: n_words, 4D: dim_phi
         x = T.concatenate([x_w, x_p], axis=3)
-        x = x.dimshuffle(0, 'x', 1, 2, 3)
         # 1D: batch, 2D: n_lists, 3D: n_prds, 4D: n_words, 5D: dim_phi
+        x = x.dimshuffle(0, 'x', 1, 2, 3)
         x = T.repeat(x, x_l.shape[1], axis=1)
         x = T.concatenate([x, x_l], axis=4)
         return x.reshape((x.shape[0] * x.shape[1], x.shape[2], x.shape[3], x.shape[4]))
+
+    def hidden_layer_forward(self, x):
+        """
+        :param x: 1D: batch * n_lists, 2D: n_prds, 3D: n_words, 4D: dim_in
+        :return: 1D: batch * n_lists, 2D: n_prds, 3D: n_words, 4D: dim_h
+        """
+        h = self.hidden_connected_layer.dot(x)
+        return self.hidden_layers.forward(h)
+
+    def output_layer_forward(self, x):
+        """
+        :param x: 1D: batch * n_lists, 2D: n_prds, 3D: n_words, 4D: dim_h
+        :return: 1D: batch * n_lists; score
+        """
+        h = x.reshape((x.shape[0], x.shape[1] * x.shape[2], x.shape[3]))
+        h = self.layers[-1].dot(h)
+        h = h.reshape((h.shape[0], h.shape[1]))
+        return T.sum(h, axis=1)

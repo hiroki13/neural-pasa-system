@@ -5,7 +5,7 @@ from abc import ABCMeta
 from ..utils.io_utils import say, dump_data, load_data
 from ..utils.preprocessor import Preprocessor, RankingPreprocessor
 from ..ling.vocab import Vocab, PAD, UNK
-from ..model.model_api import ModelAPI, RankingModelAPI, NBestModelAPI
+from ..model.model_api import ModelAPI, RankingModelAPI, NBestModelAPI, RerankingModelAPI
 
 
 class Trainer(object):
@@ -139,7 +139,6 @@ class Trainer(object):
 
 
 class RankingTrainer(Trainer):
-
     def __init__(self, argv, preprocessor):
         super(RankingTrainer, self).__init__(argv, preprocessor)
 
@@ -170,7 +169,6 @@ class RankingTrainer(Trainer):
 
 
 class NBestTrainer(Trainer):
-
     def __init__(self, argv, preprocessor):
         super(NBestTrainer, self).__init__(argv, preprocessor)
 
@@ -189,14 +187,13 @@ class NBestTrainer(Trainer):
                             test_samples=self.test_samples,
                             untrainable_emb=self.untrainable_emb)
 
-#        dev_n_best_lists = self.create_n_best_lists(self.dev_samples)
+    #        dev_n_best_lists = self.create_n_best_lists(self.dev_samples)
 
     def create_n_best_lists(self, samples):
         return self.model_api.predict_n_best_lists(samples)
 
 
 class JackKnifeTrainer(Trainer):
-
     def __init__(self, argv, preprocessor):
         super(JackKnifeTrainer, self).__init__(argv, preprocessor)
 
@@ -234,7 +231,6 @@ class JackKnifeTrainer(Trainer):
 
 
 class TrainCorpusSeparator(Trainer):
-
     def __init__(self, argv, preprocessor):
         super(TrainCorpusSeparator, self).__init__(argv, preprocessor)
 
@@ -252,10 +248,10 @@ class TrainCorpusSeparator(Trainer):
         n_samples = len(train_corpus)
         slide = n_samples / n_seps
         separated_train_set = []
-        for i in xrange(n_seps-1):
-            one_train = train_corpus[i * slide: (i+1) * slide]
+        for i in xrange(n_seps - 1):
+            one_train = train_corpus[i * slide: (i + 1) * slide]
             separated_train_set.append(one_train)
-        one_train = train_corpus[(n_seps-1) * slide:]
+        one_train = train_corpus[(n_seps - 1) * slide:]
         separated_train_set.append(one_train)
         return separated_train_set
 
@@ -265,7 +261,6 @@ class TrainCorpusSeparator(Trainer):
 
 
 class RerankingTrainer(Trainer):
-
     def __init__(self, argv, preprocessor):
         super(RerankingTrainer, self).__init__(argv, preprocessor)
 
@@ -298,15 +293,14 @@ class RerankingTrainer(Trainer):
 
     def train_model(self):
         say('\n\nTRAINING An Reranking MODEL\n')
-        model_api = self.model_api = NBestModelAPI(argv=self.argv,
-                                                   emb=self.trainable_emb,
-                                                   vocab_word=self.vocab_word,
-                                                   vocab_label=self.vocab_label)
+        model_api = self.model_api = RerankingModelAPI(argv=self.argv,
+                                                       emb=self.trainable_emb,
+                                                       vocab_word=self.vocab_word,
+                                                       vocab_label=self.vocab_label)
 
-        model_api.compile(train_sample_shared=self.train_samples)
-
+        model_api.compile()
         model_api.train_all(argv=self.argv,
-                            train_batch_index=self.train_indices,
+                            train_samples=self.train_samples,
                             dev_samples=self.dev_samples,
                             test_samples=self.test_samples,
                             untrainable_emb=self.untrainable_emb)
