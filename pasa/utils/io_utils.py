@@ -1,4 +1,6 @@
 import sys
+import os
+import shutil
 import gzip
 import cPickle
 
@@ -127,14 +129,25 @@ def set_unk(vocab_word, emb):
     return emb
 
 
+def move_data(src, dst):
+    if not os.path.exists(dst):
+        os.mkdir(dst)
+    if os.path.exists(os.path.join(dst, src)):
+        os.remove(os.path.join(dst, src))
+    shutil.move(src, dst)
+
+
 def dump_data(data, fn):
-    with gzip.open(fn + '.pkl.gz', 'wb') as gf:
+    if not fn.endswith(".pkl.gz"):
+        fn += ".gz" if fn.endswith(".pkl") else ".pkl.gz"
+    with gzip.open(fn, 'wb') as gf:
         cPickle.dump(data, gf, cPickle.HIGHEST_PROTOCOL)
 
 
 def load_data(fn):
-    if fn[-7:] != '.pkl.gz':
-        fn += '.pkl.gz'
-
+    if fn is None:
+        return None
+    if not fn.endswith(".pkl.gz"):
+        fn += ".gz" if fn.endswith(".pkl") else ".pkl.gz"
     with gzip.open(fn, 'rb') as gf:
         return cPickle.load(gf)

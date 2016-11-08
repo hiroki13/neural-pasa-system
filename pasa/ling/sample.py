@@ -181,7 +181,7 @@ class RerankingSample(Sample):
         self.set_x_y(word_phi, posit_phi)
 
     def set_label_ids(self, vocab_label):
-        self.label_ids = self._get_max_f1_list_index(self.n_best_list)
+        self.label_ids = self.n_best_list.label_ids
         self.prd_indices = self.n_best_list.prd_indices
         self.n_prds = len(self.prd_indices)
 
@@ -194,4 +194,4 @@ class RerankingSample(Sample):
         self.x_w = self._numpize(word_phi)
         self.x_p = self._numpize(posit_phi)
         self.x_l = self._numpize(self.n_best_list.lists)
-        self.y = self._numpize(self.label_ids)
+        self.y = self._numpize(self._get_max_f1_list_index(self.n_best_list))

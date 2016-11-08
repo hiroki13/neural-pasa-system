@@ -3,7 +3,7 @@ def main(argv):
 
 
 def test_setup_training(argv):
-    from ..intra_pasa.train import RankingTrainer
+    from ..api.train import RankingTrainer
 
     # 1D: n_sents (2), 2D: n_prds (2), 3D: n_words (2), 4D: dim_h (2)
     h = [

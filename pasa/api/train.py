@@ -1,9 +1,12 @@
+import os
+import shutil
+
 import numpy as np
 import theano
 
 from abc import ABCMeta
-from ..utils.io_utils import say, dump_data, load_data
-from ..utils.preprocessor import Preprocessor, RankingPreprocessor
+from ..utils.io_utils import say, dump_data, load_data, move_data
+from ..utils.preprocessor import Preprocessor, RankingPreprocessor, RerankingPreprocessor
 from ..ling.vocab import Vocab, PAD, UNK
 from ..model.model_api import ModelAPI, RankingModelAPI, NBestModelAPI, RerankingModelAPI
 
@@ -32,6 +35,8 @@ class Trainer(object):
         self._setup_corpus()
         self._setup_vocab_word()
         self._setup_label()
+        if self.argv.save:
+            self._save()
         self._setup_samples()
 
     def _setup_corpus(self):
@@ -122,6 +127,13 @@ class Trainer(object):
         self.test_samples = sample_set[2]
         self.train_indices = train_batch_index
 
+    def _save(self):
+        output_fn = 'vocab_word.cut-%d' % self.argv.vocab_cut_off
+        dump_data(self.vocab_word, output_fn)
+        move_data(output_fn + '.pkl.gz', 'data/word')
+        dump_data(self.vocab_label, 'vocab_label')
+        move_data('vocab_label.pkl.gz', 'data/label')
+
     def train_model(self):
         say('\n\nTRAINING A MODEL\n')
         model_api = self.model_api = ModelAPI(argv=self.argv,
@@ -168,68 +180,6 @@ class RankingTrainer(Trainer):
                             untrainable_emb=self.untrainable_emb)
 
 
-class NBestTrainer(Trainer):
-    def __init__(self, argv, preprocessor):
-        super(NBestTrainer, self).__init__(argv, preprocessor)
-
-    def train_model(self):
-        say('\n\nTRAINING An N-Best MODEL\n')
-        model_api = self.model_api = NBestModelAPI(argv=self.argv,
-                                                   emb=self.trainable_emb,
-                                                   vocab_word=self.vocab_word,
-                                                   vocab_label=self.vocab_label)
-
-        model_api.compile(train_sample_shared=self.train_samples)
-
-        model_api.train_all(argv=self.argv,
-                            train_batch_index=self.train_indices,
-                            dev_samples=self.dev_samples,
-                            test_samples=self.test_samples,
-                            untrainable_emb=self.untrainable_emb)
-
-    #        dev_n_best_lists = self.create_n_best_lists(self.dev_samples)
-
-    def create_n_best_lists(self, samples):
-        return self.model_api.predict_n_best_lists(samples)
-
-
-class JackKnifeTrainer(Trainer):
-    def __init__(self, argv, preprocessor):
-        super(JackKnifeTrainer, self).__init__(argv, preprocessor)
-
-    def _load_corpus_set(self):
-        self.preprocessor.set_corpus_loader()
-
-        train_set = load_data(self.argv.train_data)
-        target = self.argv.target
-        train_corpus = []
-        for i, one_train in enumerate(train_set):
-            if i == target:
-                continue
-            train_corpus.extend(one_train)
-
-        dev_corpus = self.preprocessor.corpus_loader.load_corpus(path=self.argv.dev_data)
-        return train_corpus, dev_corpus, train_set[target]
-
-    def train_model(self):
-        say('\n\nTRAINING An N-Best MODEL\n')
-        model_api = self.model_api = NBestModelAPI(argv=self.argv,
-                                                   emb=self.trainable_emb,
-                                                   vocab_word=self.vocab_word,
-                                                   vocab_label=self.vocab_label)
-
-        model_api.compile(train_sample_shared=self.train_samples)
-
-        model_api.train_all(argv=self.argv,
-                            train_batch_index=self.train_indices,
-                            dev_samples=self.dev_samples,
-                            test_samples=self.test_samples,
-                            untrainable_emb=self.untrainable_emb)
-
-    def create_n_best_lists(self, samples):
-        return self.model_api.predict_n_best_lists(samples)
-
-
 class TrainCorpusSeparator(Trainer):
     def __init__(self, argv, preprocessor):
         super(TrainCorpusSeparator, self).__init__(argv, preprocessor)
@@ -256,8 +206,68 @@ class TrainCorpusSeparator(Trainer):
         return separated_train_set
 
     @staticmethod
-    def save_train_samples(separated_train_set):
-        dump_data(separated_train_set, 'train-set.separated-%d' % len(separated_train_set))
+    def save_train_samples(train_set):
+        if not os.path.exists('data/rerank'):
+            os.mkdir('data/rerank')
+        if not os.path.exists('data/rerank/train'):
+            os.mkdir('data/rerank/train')
+        output_fn = 'train.%d.pkl.gz' % len(train_set)
+        output_dir = 'data/rerank/train/'
+        dump_data(train_set, output_fn)
+        move_data(output_fn, output_dir)
+
+
+class NBestTrainer(Trainer):
+    def __init__(self, argv, preprocessor):
+        super(NBestTrainer, self).__init__(argv, preprocessor)
+
+    def train_model(self):
+        say('\n\nTRAINING AN N-BEST MODEL\n')
+        model_api = self.model_api = NBestModelAPI(argv=self.argv,
+                                                   emb=self.trainable_emb,
+                                                   vocab_word=self.vocab_word,
+                                                   vocab_label=self.vocab_label)
+
+        model_api.compile(train_sample_shared=self.train_samples)
+
+        model_api.train_all(argv=self.argv,
+                            train_batch_index=self.train_indices,
+                            dev_samples=self.dev_samples,
+                            test_samples=self.test_samples,
+                            untrainable_emb=self.untrainable_emb)
+
+
+class JackKnifeTrainer(NBestTrainer):
+    def __init__(self, argv, preprocessor):
+        super(JackKnifeTrainer, self).__init__(argv, preprocessor)
+
+    def _load_corpus_set(self):
+        self.preprocessor.set_corpus_loader()
+        train_set = load_data(self.argv.train_data)
+        train_corpus, test_corpus = self.separate_train_part(train_set, self.argv.sec)
+        dev_corpus = self.preprocessor.corpus_loader.load_corpus(self.argv.dev_data)
+        return train_corpus, dev_corpus, test_corpus
+
+    @staticmethod
+    def separate_train_part(train_set, sec):
+        train_part = []
+        for i, one_train in enumerate(train_set):
+            if i == sec:
+                continue
+            train_part.extend(one_train)
+        return train_part, train_set[sec]
+
+    def _save(self):
+        output_fn = 'vocab_word.cut-%d.n_best-%d' % (self.argv.vocab_cut_off, self.argv.n_best)
+        if self.argv.sec is None:
+            output_fn += '.all'
+        else:
+            output_fn += '.sec-%d' % self.argv.sec
+        dump_data(self.vocab_word, output_fn)
+        move_data(output_fn + '.pkl.gz', 'data/rerank/word')
+
+        dump_data(self.vocab_label, 'vocab_label')
+        move_data('vocab_label.pkl.gz', 'data/rerank/label')
 
 
 class RerankingTrainer(Trainer):
@@ -271,13 +281,11 @@ class RerankingTrainer(Trainer):
         self._setup_label()
         self._setup_samples()
 
-    def _setup_corpus(self):
-        self.corpus_set = self._load_corpus_set()
-        self._show_corpus_stats(self.corpus_set)
-
     def _load_corpus_set(self):
         train_corpus = load_data(self.argv.train_data)
-        return train_corpus, None, None
+        dev_corpus = load_data(self.argv.dev_data)
+        test_corpus = load_data(self.argv.test_data)
+        return train_corpus, dev_corpus, test_corpus
 
     def _show_corpus_stats(self, corpus_set):
         pass
@@ -285,14 +293,13 @@ class RerankingTrainer(Trainer):
     def _setup_samples(self):
         self.preprocessor.set_sample_factory(self.vocab_word, self.vocab_label)
         sample_set = self.preprocessor.create_sample_set(self.corpus_set)
-        train_sample_batched = self.preprocessor.create_shared_samples(sample_set[0])
 
-        self.train_samples = train_sample_batched
+        self.train_samples = self.preprocessor.create_shared_samples(sample_set[0])
         self.dev_samples = sample_set[1]
         self.test_samples = sample_set[2]
 
     def train_model(self):
-        say('\n\nTRAINING An Reranking MODEL\n')
+        say('\n\nTRAINING AN RERANKING MODEL\n')
         model_api = self.model_api = RerankingModelAPI(argv=self.argv,
                                                        emb=self.trainable_emb,
                                                        vocab_word=self.vocab_word,
@@ -315,6 +322,8 @@ def select_trainer(argv):
         return JackKnifeTrainer(argv, Preprocessor(argv))
     elif argv.model == 'sep':
         return TrainCorpusSeparator(argv, Preprocessor(argv))
+    elif argv.model == 'rerank':
+        return RerankingTrainer(argv, RerankingPreprocessor(argv))
     return NBestTrainer(argv, Preprocessor(argv))
 
 

@@ -3,7 +3,7 @@ import theano
 import theano.tensor as T
 import random
 
-from ..intra_pasa.train import RerankingTrainer
+from ..api.train import RerankingTrainer
 from ..utils.preprocessor import RerankingPreprocessor
 
 theano.config.floatX = 'float32'
@@ -15,22 +15,6 @@ def main(_argv):
     trainer = RerankingTrainer(_argv, RerankingPreprocessor(_argv))
     trainer.setup_training()
     trainer.train_model()
-    exit()
-    test_grid_propagate(trainer.train_samples[0])
-
-
-def test_grid_propagate(x_in):
-    from ..nn.rnn import GridNetwork
-
-    dim_h = 4
-    grid_net = GridNetwork(unit='gru', depth=1, n_in=dim_h, n_h=dim_h)
-
-    x = T.ftensor4()
-    h = grid_net.forward(x)
-
-    f = theano.function(inputs=[x], outputs=h)
-
-    return f(x_in)
 
 
 if __name__ == '__main__':

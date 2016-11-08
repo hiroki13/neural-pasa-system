@@ -239,6 +239,7 @@ class RerankingModel(Model):
         argv = self.argv
         self.inputs = [x_w, x_p, x_l, y]
 
+        batch = x_w.shape[0]
         self.dropout = theano.shared(np.float32(argv.dropout).astype(theano.config.floatX))
         self.set_layers(self.emb)
         self.set_params()
@@ -248,25 +249,20 @@ class RerankingModel(Model):
         ############
         x = self.emb_layer_forward(x_w, x_p, x_l)
         h = self.hidden_layer_forward(x)
-        h = self.h = self.output_layer_forward(h)
-
-        """
-        h = self.hidden_layer_forward(x)
         h = self.output_layer_forward(h)
+        h = h.reshape((batch, h.shape[0] / batch))
 
         ###########
         # Outputs #
         ###########
         self.y_gold = y
-        self.y_pred = self.output_layer.decode(h)
-        self.y_prob = h.dimshuffle(1, 0, 2)
+        self.y_pred = T.argmax(h, axis=1)
 
         ############
         # Training #
         ############
         self.nll, self.cost = self.objective_f(h=h, reg=argv.reg)
         self.update = self.optimize(cost=self.cost, opt=argv.opt, lr=argv.lr)
-        """
 
     def set_layers(self, init_emb):
         argv = self.argv
@@ -331,3 +327,10 @@ class RerankingModel(Model):
         h = self.layers[-1].dot(h)
         h = h.reshape((h.shape[0], h.shape[1]))
         return T.sum(h, axis=1)
+
+    def objective_f(self, h, reg):
+        pos_scores = h[T.arange(h.shape[0]), self.y_gold]
+        neg_scores = h[T.arange(h.shape[0]), self.y_pred]
+        nll = hinge_loss(pos_scores, neg_scores)
+        cost = nll + reg * L2_sqr(self.params) / 2.
+        return nll, cost

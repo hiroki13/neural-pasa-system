@@ -15,6 +15,9 @@ class Eval(object):
         self.results_sys = np.zeros(3, dtype='float32')
         self.results_gold = np.zeros(3, dtype='float32')
 
+        self.correct = 0.
+        self.total = 0.
+
         self.all_corrects = 0.
         self.all_results_sys = 0.
         self.all_results_gold = 0.
@@ -31,7 +34,7 @@ class Eval(object):
 
     def update_results(self, batch_y_hat, batch_y):
         assert len(batch_y_hat) == len(batch_y)
-        assert len(batch_y_hat[0]) == len(batch_y[0])
+        assert len(batch_y_hat[0]) == len(batch_y[0]), '%s\n%s' % (str(batch_y_hat), str(batch_y))
 
         for i in xrange(len(batch_y_hat)):
             sent_y_hat = batch_y_hat[i]
@@ -180,3 +183,12 @@ class Eval(object):
             self.all_f1, self.all_precision, crr, r_sys, self.all_recall, crr, r_gold)
             )
 
+    def update_rerank_results(self, batch_y_hat, batch_y):
+        assert len(batch_y_hat) == len(batch_y)
+        for y_hat, y in zip(batch_y_hat, batch_y):
+            if y_hat == y:
+                self.correct += 1
+            self.total += 1
+
+    def show_accuracy(self):
+        say('\n\tACCURACY: {:.2%} ({:d}/{:d})'.format(self.correct / self.total, int(self.correct), int(self.total)))

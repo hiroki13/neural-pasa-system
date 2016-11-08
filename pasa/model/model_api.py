@@ -1,4 +1,5 @@
 import sys
+import os
 import time
 import gzip
 import math
@@ -9,7 +10,7 @@ import theano
 import theano.tensor as T
 
 from model import Model, RankingModel, RerankingModel
-from ..utils.io_utils import say, dump_data
+from ..utils.io_utils import say, move_data
 from ..utils.eval import Eval
 from ..decoder.decoder import Decoder
 from ..utils.nbl_factory import NBestListFactory
@@ -20,6 +21,8 @@ class ModelAPI(object):
     def __init__(self, argv, emb, vocab_word, vocab_label):
         self.argv = argv
         self.emb = emb
+        self.output_fn = None
+        self.output_dir = None
         self.vocab_word = vocab_word
         self.vocab_label = vocab_label
 
@@ -30,11 +33,16 @@ class ModelAPI(object):
 
     def compile(self, train_sample_shared=None):
         say('\n\nBuilding a model API...\n')
+        self.set_output()
         self.set_model()
         self.compile_model()
         self.set_decoder()
         self.set_train_f(train_sample_shared)
         self.set_predict_f()
+
+    def set_output(self):
+        self.output_fn = self._set_output_fn()
+        self.output_dir = self._set_output_dir()
 
     def set_model(self):
         self.model = Model(argv=self.argv,
@@ -103,7 +111,7 @@ class ModelAPI(object):
                 self.model.emb_layer.word_emb.set_value(np.r_[trainable_emb, untrainable_emb])
 
             update = False
-            if argv.dev_data:
+            if dev_samples:
                 print '\n  DEV\n\t',
                 dev_results, dev_results_prob = self.predict_all(dev_samples)
                 dev_f1 = self.eval_all(dev_results, dev_samples)
@@ -113,10 +121,7 @@ class ModelAPI(object):
                     update = True
 
                     if argv.save:
-                        self.save_params('params.intra.layers-%d.window-%d.reg-%f' %
-                                         (argv.layers, argv.window, argv.reg))
-                        self.save_config('config.intra.layers-%d.window-%d.reg-%f' %
-                                         (argv.layers, argv.window, argv.reg))
+                        self.save()
 
                     if argv.result:
                         self.output_results('result.dev.txt', dev_samples)
@@ -124,7 +129,7 @@ class ModelAPI(object):
             ########
             # Test #
             ########
-            if argv.test_data:
+            if test_samples:
                 print '\n  TEST\n\t',
                 test_results, test_results_prob = self.predict_all(test_samples)
                 test_f1 = self.eval_all(test_results, test_samples)
@@ -276,19 +281,43 @@ class ModelAPI(object):
 
                 print >> fout
 
-    def save_params(self, path):
-        if not path.endswith(".pkl.gz"):
-            path += ".gz" if path.endswith(".pkl") else ".pkl.gz"
-        with gzip.open(path, "w") as fout:
+    def _set_output_fn(self):
+        argv = self.argv
+        if argv.output_fn is None:
+            return 'model-%s.layers-%d' % (argv.model, argv.layers)
+        return argv.output_fn
+
+    def _set_output_dir(self):
+        argv = self.argv
+        if argv.output_dir is not None and os.path.exists(argv.output_dir):
+            return argv.output_dir
+        if not os.path.exists('data'):
+            os.mkdir('data')
+        return 'data/'
+
+    def save(self):
+        self._save_params(self.output_fn, self.output_dir)
+        self._save_config(self.output_fn, self.output_dir)
+
+    def _save_params(self, fn, output_dir):
+        fn = 'param.' + fn
+        if not fn.endswith(".pkl.gz"):
+            fn += ".gz" if fn.endswith(".pkl") else ".pkl.gz"
+        with gzip.open(fn, "w") as fout:
             pickle.dump([l.params for l in self.model.layers], fout,
                         protocol=pickle.HIGHEST_PROTOCOL)
+        output_dir += 'param'
+        move_data(fn, output_dir)
 
-    def save_config(self, path):
-        if not path.endswith(".pkl.gz"):
-            path += ".gz" if path.endswith(".pkl") else ".pkl.gz"
-        with gzip.open(path, "w") as fout:
+    def _save_config(self, fn, output_dir):
+        fn = 'config.' + fn
+        if not fn.endswith(".pkl.gz"):
+            fn += ".gz" if fn.endswith(".pkl") else ".pkl.gz"
+        with gzip.open(fn, "w") as fout:
             pickle.dump(self.argv, fout,
                         protocol=pickle.HIGHEST_PROTOCOL)
+        output_dir += 'config'
+        move_data(fn, output_dir)
 
     def load_params(self, path):
         with gzip.open(path) as fin:
@@ -481,7 +510,7 @@ class NBestModelAPI(ModelAPI):
                 self.model.emb_layer.word_emb.set_value(np.r_[trainable_emb, untrainable_emb])
 
             update = False
-            if argv.dev_data:
+            if dev_samples:
                 print '\n  DEV\n\t',
                 dev_results, dev_results_prob = self.predict_all(dev_samples)
                 dev_f1 = self.eval_all(dev_results, dev_samples)
@@ -493,15 +522,12 @@ class NBestModelAPI(ModelAPI):
                     update = True
 
                     if argv.save:
-                        self.save_params('params.intra.layers-%d.window-%d.reg-%f' %
-                                         (argv.layers, argv.window, argv.reg))
-                        self.save_config('config.intra.layers-%d.window-%d.reg-%f' %
-                                         (argv.layers, argv.window, argv.reg))
+                        self.save()
 
             ########
             # Test #
             ########
-            if argv.test_data:
+            if test_samples:
                 print '\n  TEST\n\t',
                 test_results, test_results_prob = self.predict_all(test_samples)
                 test_f1 = self.eval_all(test_results, test_samples)
@@ -512,9 +538,6 @@ class NBestModelAPI(ModelAPI):
                         f1_history[epoch+1].append(test_f1)
                     else:
                         f1_history[epoch+1] = [test_f1]
-
-                    if argv.result:
-                        dump_data(test_n_best_lists, 'best-%d.target-%d' % (self.argv.n_best, self.argv.target))
 
             if untrainable_emb is not None:
                 self.model.emb_layer.word_emb.set_value(trainable_emb)
@@ -530,6 +553,25 @@ class NBestModelAPI(ModelAPI):
                     say('\n\tEPOCH-{:d}  \tBEST DEV F:{:.2%}'.format(k, v[0]))
             say('\n\n')
 
+    def _set_output_fn(self):
+        argv = self.argv
+        if argv.output_fn is None:
+            output_fn = 'model-%s.layers-%d.n_best-%d' % (argv.model, argv.layers, argv.n_best)
+            if argv.sec is None:
+                output_fn += '.all'
+            else:
+                output_fn += '.sec-%d' % argv.sec
+            return output_fn
+        return argv.output_fn
+
+    def _set_output_dir(self):
+        argv = self.argv
+        if argv.output_dir is not None and os.path.exists(argv.output_dir):
+            return argv.output_dir
+        if not os.path.exists('data/rerank'):
+            os.mkdir('data/rerank')
+        return 'data/rerank/'
+
     def predict_n_best_lists(self, samples):
         _, results_prob = self.predict_all(samples)
         n_best_lists = self.create_n_best_lists(samples=samples, all_prob_lists=results_prob)
@@ -543,6 +585,17 @@ class NBestModelAPI(ModelAPI):
 
     def eval_n_best_lists(self, samples, n_best_lists):
         self.nbl_factory.eval_n_best_list(samples, n_best_lists)
+
+    @staticmethod
+    def save_n_best_lists(fn, output_dir, n_best_lists):
+        fn = 'list.' + fn
+        if not fn.endswith(".pkl.gz"):
+            fn += ".gz" if fn.endswith(".pkl") else ".pkl.gz"
+        with gzip.open(fn, "w") as fout:
+            pickle.dump(n_best_lists, fout,
+                        protocol=pickle.HIGHEST_PROTOCOL)
+        output_dir += 'list'
+        move_data(fn, output_dir)
 
 
 class RerankingModelAPI(ModelAPI):
@@ -568,20 +621,22 @@ class RerankingModelAPI(ModelAPI):
     def set_train_f(self, samples):
         model = self.model
         self.train = theano.function(inputs=model.inputs,
-                                     outputs=[model.h],
-                                     on_unused_input='ignore'
+                                     outputs=[model.y_pred, model.y_gold, model.nll],
+                                     updates=model.update,
                                      )
 
     def set_predict_f(self):
         model = self.model
         self.predict = theano.function(inputs=model.inputs,
-                                       outputs=model.y_prob,
+                                       outputs=model.y_pred,
                                        on_unused_input='ignore'
                                        )
 
     def train_all(self, argv, train_samples, dev_samples, test_samples, untrainable_emb=None):
         say('\n\nTRAINING START\n\n')
 
+        f1_history = {}
+        best_dev_f1 = -1.
         for epoch in xrange(argv.epoch):
             dropout_p = np.float32(argv.dropout).astype(theano.config.floatX)
             self.model.dropout.set_value(dropout_p)
@@ -591,9 +646,62 @@ class RerankingModelAPI(ModelAPI):
 
             self.train_each(train_samples)
 
+            ###############
+            # Development #
+            ###############
+            if untrainable_emb is not None:
+                trainable_emb = self.model.emb_layer.word_emb.get_value(True)
+                self.model.emb_layer.word_emb.set_value(np.r_[trainable_emb, untrainable_emb])
+
+            update = False
+            if argv.dev_data:
+                print '\n  DEV\n\t',
+                dev_results = self.predict_all(dev_samples)
+                dev_f1 = self.eval_all(dev_results, dev_samples)
+                if best_dev_f1 < dev_f1:
+                    best_dev_f1 = dev_f1
+                    f1_history[epoch+1] = [best_dev_f1]
+                    update = True
+
+                    if argv.save:
+                        self.save_params('params.layers-%d.window-%d.reg-%f' %
+                                         (argv.layers, argv.window, argv.reg))
+                        self.save_config('config.layers-%d.window-%d.reg-%f' %
+                                         (argv.layers, argv.window, argv.reg))
+
+                    if argv.result:
+                        self.output_results('result.dev.txt', dev_samples)
+
+            ########
+            # Test #
+            ########
+            if argv.test_data:
+                print '\n  TEST\n\t',
+                test_results = self.predict_all(test_samples)
+                test_f1 = self.eval_all(test_results, test_samples)
+                if update:
+                    if epoch+1 in f1_history:
+                        f1_history[epoch+1].append(test_f1)
+                    else:
+                        f1_history[epoch+1] = [test_f1]
+
+            if untrainable_emb is not None:
+                self.model.emb_layer.word_emb.set_value(trainable_emb)
+
+            ###########
+            # Results #
+            ###########
+            say('\n\n\tF1 HISTORY')
+            for k, v in sorted(f1_history.items()):
+                if len(v) == 2:
+                    say('\n\tEPOCH-{:d}  \tBEST DEV F:{:.2%}\tBEST TEST F:{:.2%}'.format(k, v[0], v[1]))
+                else:
+                    say('\n\tEPOCH-{:d}  \tBEST DEV F:{:.2%}'.format(k, v[0]))
+            say('\n\n')
+
     def train_each(self, train_samples):
         tr_indices = range(len(train_samples))
-#        np.random.shuffle(tr_indices)
+        np.random.shuffle(tr_indices)
         train_eval = Eval()
         start = time.time()
 
@@ -602,11 +710,52 @@ class RerankingModelAPI(ModelAPI):
                 print index,
                 sys.stdout.flush()
 
-            x_w, x_p, x_l, y = train_samples[b_index]
-            nll = self.train(x_w, x_p, x_l, y)
-            print nll
-            exit()
+            x_w, x_p, x_l, oracle_y, y = train_samples[b_index]
+            result_sys, result_gold, nll = self.train(x_w, x_p, x_l, oracle_y)
             assert not math.isnan(nll), 'NLL is NAN: Index: %d' % index
 
+            y_hat = self.extract_labels(x_l, result_sys)
+            train_eval.update_results(y_hat, y)
+            train_eval.update_rerank_results(result_sys, result_gold)
+            train_eval.nll += nll
+
         print '\tTime: %f' % (time.time() - start)
+        train_eval.show_accuracy()
         train_eval.show_results()
+
+    def predict_all(self, samples):
+        all_best_lists = []
+        all_prob_lists = []
+        start = time.time()
+        self.model.dropout.set_value(0.0)
+
+        for index, sample in enumerate(samples):
+            if index != 0 and index % 1000 == 0:
+                print index,
+                sys.stdout.flush()
+
+            if sample.n_prds == 0:
+                all_best_lists.append([])
+                all_prob_lists.append([])
+                continue
+
+            result_sys = self.predict([sample.x_w], [sample.x_p], [sample.x_l], [sample.y])
+            best_list = self.extract_labels([sample.x_l], result_sys)
+            all_best_lists.append(best_list)
+
+        print '\tTime: %f' % (time.time() - start)
+        return all_best_lists
+
+    @staticmethod
+    def extract_labels(labels, y_indices):
+        """
+        :param labels: 1D: batch, 2D: n_lists, 3D: n_prds, 4D: n_words; label id
+        :param y_indices: 1D: batch; index
+        :return: 1D: batch * n_prds, 2D: n_words; label id
+        """
+        assert len(labels) == len(y_indices), '%s\n%s' % (str(labels), str(y_indices))
+        best_labels = []
+        for n_list, index in zip(labels, y_indices):
+            best_labels.extend(n_list[index])
+        return best_labels
+

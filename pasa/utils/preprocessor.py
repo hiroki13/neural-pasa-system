@@ -1,6 +1,6 @@
 from ..ling.vocab import Vocab, UNK
 from ..utils.sample_factory import BasicSampleFactory, RankingSampleFactory, RerankingSampleFactory
-from io_utils import CorpusLoader, say, dump_data, load_data, load_init_emb
+from io_utils import CorpusLoader, say, dump_data, load_data, load_init_emb, move_data
 from stats import corpus_statistics, sample_statistics
 
 
@@ -41,11 +41,10 @@ class Preprocessor(object):
     def create_shared_samples(self, samples):
         return self.sample_factory.create_shared_batch_samples(samples)
 
-    def create_vocab_label(self):
+    @staticmethod
+    def create_vocab_label():
         vocab_label = Vocab()
         vocab_label.set_pas_labels()
-        if self.argv.save:
-            dump_data(vocab_label, 'vocab_label')
         say('\nTARGET LABELS: %d\t%s\n' % (vocab_label.size(), str(vocab_label.w2i)))
         return vocab_label
 
@@ -54,8 +53,6 @@ class Preprocessor(object):
         vocab_word.set_init_word()
         vocab_word.add_vocab_from_corpus(corpus=corpus, vocab_cut_off=self.argv.vocab_cut_off)
         vocab_word.add_word(UNK)
-        if self.argv.save:
-            dump_data(vocab_word, 'vocab_word.cut-%d' % self.argv.vocab_cut_off)
         say('\nVocab: %d\tType: word\n' % vocab_word.size())
         return vocab_word
 
