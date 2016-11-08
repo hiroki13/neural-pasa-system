@@ -1,10 +1,8 @@
-import sys
-import time
 from copy import deepcopy
 
 import numpy as np
-from ..utils.eval import Eval
-from ..utils.io_utils import say
+
+from ..ling.graph import Graph, Node, PriorityQueue
 
 
 class Decoder(object):
@@ -85,3 +83,52 @@ class Decoder(object):
         prd_index, word_index, label_index, prob = sorted_prob_list.pop(0)
         n_th_list[prd_index][word_index] = label_index
         return n_th_list
+
+    @staticmethod
+    def forward_dp(matrix):
+        """
+        :param matrix: 1D: n_prds * n_words, 2D: n_labels; label probability
+        :return: 1D: n_prds, 2D: n_words; label index
+        """
+        graph = Graph(matrix)
+        for i in xrange(graph.n_column):
+            nodes = graph.column(i)
+            for node in nodes:
+                score = -1000000
+                best_prev = None
+                for prev in node.prev_nodes:
+                    tmp_score = prev.f + node.score
+                    if tmp_score > score:
+                        score = tmp_score
+                        best_prev = prev
+                node.best_prev_node = best_prev
+                node.f = score
+        return graph
+
+    @staticmethod
+    def backward_a_star(graph, n_best):
+        result = PriorityQueue()
+        q = PriorityQueue()
+        EOS = Node(-1, -1, 0., graph.column(graph.n_column-1))
+        q.push(EOS)
+
+        while not q.empty():
+            node = q.pop()
+            if node.c_index == 0:
+                result.push(node)
+            else:
+                for prev in node.prev_nodes:
+                    """
+                    prev.g = node.g + node.score
+                    prev.next_node = node
+                    prev.h = prev.f + prev.g
+                    q.push(prev)
+                    """
+                    p = Node(prev.r_index, prev.c_index, prev.score, prev.prev_nodes)
+                    p.f = prev.f
+                    p.g = node.g + node.score
+                    p.h = p.f + p.g
+                    p.next_node = node
+                    q.push(p)
+            if len(result) == n_best:
+                return result
