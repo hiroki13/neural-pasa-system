@@ -484,75 +484,6 @@ class NBestModelAPI(ModelAPI):
         super(NBestModelAPI, self).__init__(argv, emb, vocab_word, vocab_label)
         self.nbl_factory = NBestListFactory(argv.n_best)
 
-    def train_all(self, argv, train_batch_index, dev_samples, test_samples, untrainable_emb=None):
-        say('\n\nTRAINING START\n\n')
-
-        n_train_batches = len(train_batch_index)
-        tr_indices = range(n_train_batches)
-
-        f1_history = {}
-        best_dev_f1 = -1.
-
-        for epoch in xrange(argv.epoch):
-            dropout_p = np.float32(argv.dropout).astype(theano.config.floatX)
-            self.model.dropout.set_value(dropout_p)
-
-            say('\nEpoch: %d\n' % (epoch + 1))
-            print '  TRAIN\n\t',
-
-            self.train_each(tr_indices, train_batch_index)
-
-            ###############
-            # Development #
-            ###############
-            if untrainable_emb is not None:
-                trainable_emb = self.model.emb_layer.word_emb.get_value(True)
-                self.model.emb_layer.word_emb.set_value(np.r_[trainable_emb, untrainable_emb])
-
-            update = False
-            if dev_samples:
-                print '\n  DEV\n\t',
-                dev_results, dev_results_prob = self.predict_all(dev_samples)
-                dev_f1 = self.eval_all(dev_results, dev_samples)
-                dev_n_best_lists = self.predict_n_best_lists(dev_samples)
-
-                if best_dev_f1 < dev_f1:
-                    best_dev_f1 = dev_f1
-                    f1_history[epoch+1] = [best_dev_f1]
-                    update = True
-
-                    if argv.save:
-                        self.save()
-
-            ########
-            # Test #
-            ########
-            if test_samples:
-                print '\n  TEST\n\t',
-                test_results, test_results_prob = self.predict_all(test_samples)
-                test_f1 = self.eval_all(test_results, test_samples)
-                test_n_best_lists = self.predict_n_best_lists(test_samples)
-
-                if update:
-                    if epoch+1 in f1_history:
-                        f1_history[epoch+1].append(test_f1)
-                    else:
-                        f1_history[epoch+1] = [test_f1]
-
-            if untrainable_emb is not None:
-                self.model.emb_layer.word_emb.set_value(trainable_emb)
-
-            ###########
-            # Results #
-            ###########
-            say('\n\n\tF1 HISTORY')
-            for k, v in sorted(f1_history.items()):
-                if len(v) == 2:
-                    say('\n\tEPOCH-{:d}  \tBEST DEV F:{:.2%}\tBEST TEST F:{:.2%}'.format(k, v[0], v[1]))
-                else:
-                    say('\n\tEPOCH-{:d}  \tBEST DEV F:{:.2%}'.format(k, v[0]))
-            say('\n\n')
-
     def _set_output_fn(self):
         argv = self.argv
         if argv.output_fn is None:
@@ -594,7 +525,6 @@ class NBestModelAPI(ModelAPI):
         with gzip.open(fn, "w") as fout:
             pickle.dump(n_best_lists, fout,
                         protocol=pickle.HIGHEST_PROTOCOL)
-        output_dir += 'list'
         move_data(fn, output_dir)
 
 
@@ -664,13 +594,7 @@ class RerankingModelAPI(ModelAPI):
                     update = True
 
                     if argv.save:
-                        self.save_params('params.layers-%d.window-%d.reg-%f' %
-                                         (argv.layers, argv.window, argv.reg))
-                        self.save_config('config.layers-%d.window-%d.reg-%f' %
-                                         (argv.layers, argv.window, argv.reg))
-
-                    if argv.result:
-                        self.output_results('result.dev.txt', dev_samples)
+                        self.save()
 
             ########
             # Test #
@@ -758,4 +682,18 @@ class RerankingModelAPI(ModelAPI):
         for n_list, index in zip(labels, y_indices):
             best_labels.extend(n_list[index])
         return best_labels
+
+    def _set_output_fn(self):
+        argv = self.argv
+        if argv.output_fn is None:
+            return 'model-%s.layers-%d' % (argv.model, argv.layers)
+        return argv.output_fn
+
+    def _set_output_dir(self):
+        argv = self.argv
+        if argv.output_dir is not None and os.path.exists(argv.output_dir):
+            return argv.output_dir
+        if not os.path.exists('data/rerank'):
+            os.mkdir('data/rerank')
+        return 'data/rerank/'
 

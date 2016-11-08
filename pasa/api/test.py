@@ -7,6 +7,9 @@ class Tester(object):
 
     def __init__(self, argv, preprocessor):
         self.argv = argv
+        self.config = load_data(argv.load_config)
+        preprocessor.argv.window = self.config.window
+
         self.preprocessor = preprocessor
         self.model_api = None
 
@@ -51,8 +54,8 @@ class Tester(object):
         self.test_samples = sample_set[2]
 
     def _setup_model_api(self):
-        config = load_data(self.argv.load_config)
-        model_api = self.model_api = ModelAPI(argv=config,
+        say('\n\nSetting up a model API...\n')
+        model_api = self.model_api = ModelAPI(argv=self.config,
                                               emb=None,
                                               vocab_word=self.vocab_word,
                                               vocab_label=self.vocab_label)
@@ -97,8 +100,8 @@ class JackKnifeTester(Tester):
         return None, train_set[sec]
 
     def _setup_model_api(self):
-        config = load_data(self.argv.load_config)
-        model_api = self.model_api = NBestModelAPI(argv=config,
+        say('\n\nSetting up a model API...\n')
+        model_api = self.model_api = NBestModelAPI(argv=self.config,
                                                    emb=None,
                                                    vocab_word=self.vocab_word,
                                                    vocab_label=self.vocab_label)
@@ -110,6 +113,7 @@ class JackKnifeTester(Tester):
         model_api.set_predict_f()
 
     def predict(self):
+        argv = self.argv
         model_api = self.model_api
 
         if self.dev_samples:
@@ -124,7 +128,12 @@ class JackKnifeTester(Tester):
             test_f1 = model_api.eval_all(test_results, self.test_samples)
             say('\n\n\tBEST TEST F:{:.2%}\n'.format(test_f1))
             test_n_best_lists = model_api.predict_n_best_lists(self.test_samples)
-            model_api.save_n_best_lists(model_api.output_fn, model_api.output_dir, test_n_best_lists)
+
+            output_fn = 'sec%d' % argv.sec
+            output_dir = 'data/rerank/list/layers%d/best%d/' % (model_api.argv.layers, model_api.argv.n_best)
+            if argv.output_dir is not None:
+                output_dir = argv.output_dir
+            model_api.save_n_best_lists(output_fn, output_dir, test_n_best_lists)
 
 
 def select_tester(argv):

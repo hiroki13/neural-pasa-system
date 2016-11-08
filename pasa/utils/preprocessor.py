@@ -1,6 +1,6 @@
 from ..ling.vocab import Vocab, UNK
 from ..utils.sample_factory import BasicSampleFactory, RankingSampleFactory, RerankingSampleFactory
-from io_utils import CorpusLoader, say, dump_data, load_data, load_init_emb, move_data
+from io_utils import CorpusLoader, say, load_data, load_init_emb
 from stats import corpus_statistics, sample_statistics
 
 
@@ -114,8 +114,6 @@ class RerankingPreprocessor(Preprocessor):
         vocab_word.set_init_word()
         vocab_word.add_vocab_from_lists(corpus=corpus, vocab_cut_off=self.argv.vocab_cut_off)
         vocab_word.add_word(UNK)
-        if self.argv.save:
-            dump_data(vocab_word, 'vocab_word.cut-%d' % self.argv.vocab_cut_off)
         say('\nVocab: %d\tType: word\n' % vocab_word.size())
         return vocab_word
 

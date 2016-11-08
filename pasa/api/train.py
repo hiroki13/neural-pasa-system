@@ -1,11 +1,10 @@
 import os
-import shutil
 
 import numpy as np
 import theano
 
 from abc import ABCMeta
-from ..utils.io_utils import say, dump_data, load_data, move_data
+from ..utils.io_utils import say, dump_data, load_data, move_data, load_dir
 from ..utils.preprocessor import Preprocessor, RankingPreprocessor, RerankingPreprocessor
 from ..ling.vocab import Vocab, PAD, UNK
 from ..model.model_api import ModelAPI, RankingModelAPI, NBestModelAPI, RerankingModelAPI
@@ -279,16 +278,23 @@ class RerankingTrainer(Trainer):
         self._setup_corpus()
         self._setup_vocab_word()
         self._setup_label()
+        if self.argv.save:
+            self._save()
         self._setup_samples()
 
     def _load_corpus_set(self):
-        train_corpus = load_data(self.argv.train_data)
+        train_corpus = load_dir(self.argv.train_data)
         dev_corpus = load_data(self.argv.dev_data)
         test_corpus = load_data(self.argv.test_data)
         return train_corpus, dev_corpus, test_corpus
 
     def _show_corpus_stats(self, corpus_set):
         pass
+
+    def _save(self):
+        output_fn = 'vocab_word.rerank.cut-%d' % self.argv.vocab_cut_off
+        dump_data(self.vocab_word, output_fn)
+        move_data(output_fn + '.pkl.gz', 'data/rerank/word')
 
     def _setup_samples(self):
         self.preprocessor.set_sample_factory(self.vocab_word, self.vocab_label)

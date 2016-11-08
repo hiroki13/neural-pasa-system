@@ -131,7 +131,12 @@ def set_unk(vocab_word, emb):
 
 def move_data(src, dst):
     if not os.path.exists(dst):
-        os.mkdir(dst)
+        path = ''
+        for dn in dst.split('/'):
+            path += dn + '/'
+            if os.path.exists(path):
+                continue
+            os.mkdir(path)
     if os.path.exists(os.path.join(dst, src)):
         os.remove(os.path.join(dst, src))
     shutil.move(src, dst)
@@ -151,3 +156,14 @@ def load_data(fn):
         fn += ".gz" if fn.endswith(".pkl") else ".pkl.gz"
     with gzip.open(fn, 'rb') as gf:
         return cPickle.load(gf)
+
+
+def load_dir(dn):
+    assert os.path.exists(dn)
+    corpus = []
+    file_names = os.listdir(dn)
+    say('\nLoading the files: %s\n' % str(file_names))
+    for fn in file_names:
+        path = os.path.join(dn, fn)
+        corpus.extend(load_data(path))
+    return corpus
