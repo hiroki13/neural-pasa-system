@@ -34,15 +34,25 @@ class Node(object):
         self.c_index = c_index
         self.score = score
         self.prev_nodes = prev_nodes
-
-        self.best_prev_node = None
         self.next_node = None
-        self.f = 0.
-        self.g = 0.
+
         self.h = 0.
+        self.g = 0.
+        self.f = 0.
 
     def __le__(self, other):
-        return self.h >= other.h
+        return self.f >= other.f
+
+    def get_seq(self):
+        seq = []
+        node = self
+        while node.c_index > -1:
+            seq.append(node.r_index)
+            node = node.next_node
+        return seq
+
+    def show(self):
+        print 'r:%d\tc:%d\ts:%f\tf:%d\tg:%d\th:%d' % (self.r_index, self.c_index, self.score, self.h, self.g, self.f)
 
 
 class PriorityQueue(object):
