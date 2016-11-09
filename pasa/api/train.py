@@ -127,7 +127,7 @@ class Trainer(object):
         self.train_indices = train_batch_index
 
     def _save(self):
-        output_fn = 'vocab_word.cut-%d' % self.argv.vocab_cut_off
+        output_fn = 'vocab_word.size-%d.cut-%d' % (self.vocab_word.size(), self.argv.vocab_cut_off)
         dump_data(self.vocab_word, output_fn)
         move_data(output_fn + '.pkl.gz', 'data/word')
         dump_data(self.vocab_label, 'vocab_label')
@@ -257,7 +257,9 @@ class JackKnifeTrainer(NBestTrainer):
         return train_part, train_set[sec]
 
     def _save(self):
-        output_fn = 'vocab_word.cut-%d.n_best-%d' % (self.argv.vocab_cut_off, self.argv.n_best)
+        output_fn = 'vocab_word.size-%d.cut-%d.n_best-%d' % (self.vocab_word.size(),
+                                                             self.argv.vocab_cut_off,
+                                                             self.argv.n_best)
         if self.argv.sec is None:
             output_fn += '.all'
         else:
@@ -292,7 +294,7 @@ class RerankingTrainer(Trainer):
         pass
 
     def _save(self):
-        output_fn = 'vocab_word.rerank.cut-%d' % self.argv.vocab_cut_off
+        output_fn = 'vocab_word.rerank.size-%d.cut-%d' % (self.vocab_word.size(), self.argv.vocab_cut_off)
         dump_data(self.vocab_word, output_fn)
         move_data(output_fn + '.pkl.gz', 'data/rerank/word')
 

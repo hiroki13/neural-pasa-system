@@ -101,6 +101,7 @@ class JackKnifeTester(Tester):
 
     def _setup_model_api(self):
         say('\n\nSetting up a model API...\n')
+        self.config.n_best = self.argv.n_best
         model_api = self.model_api = NBestModelAPI(argv=self.config,
                                                    emb=None,
                                                    vocab_word=self.vocab_word,
@@ -127,13 +128,27 @@ class JackKnifeTester(Tester):
             test_results, test_results_prob = model_api.predict_all(self.test_samples)
             test_f1 = model_api.eval_all(test_results, self.test_samples)
             say('\n\n\tBEST TEST F:{:.2%}\n'.format(test_f1))
-            test_n_best_lists = model_api.predict_n_best_lists(self.test_samples)
+            test_n_best_lists = model_api.create_n_best_lists(self.test_samples, test_results_prob)
+            model_api.eval_n_best_lists(self.test_samples, test_n_best_lists)
 
-            output_fn = 'sec%d' % argv.sec
+            sec = 'all' if argv.sec is None else str(argv.sec)
+            output_fn = 'sec-%s' % sec
             output_dir = 'data/rerank/list/layers%d/best%d/' % (model_api.argv.layers, model_api.argv.n_best)
             if argv.output_dir is not None:
                 output_dir = argv.output_dir
             model_api.save_n_best_lists(output_fn, output_dir, test_n_best_lists)
+
+
+class NBestTester(JackKnifeTester):
+
+    def __init__(self, argv, preprocessor):
+        super(NBestTester, self).__init__(argv, preprocessor)
+
+    def _load_corpus_set(self):
+        self.preprocessor.set_corpus_loader()
+        dev_corpus = self.preprocessor.corpus_loader.load_corpus(self.argv.dev_data)
+        test_corpus = self.preprocessor.corpus_loader.load_corpus(self.argv.test_data)
+        return None, dev_corpus, test_corpus
 
 
 def select_tester(argv):
@@ -141,6 +156,7 @@ def select_tester(argv):
         return Tester(argv, Preprocessor(argv))
     elif argv.model == 'jack':
         return JackKnifeTester(argv, Preprocessor(argv))
+    return NBestTester(argv, Preprocessor(argv))
 
 
 def main(argv):

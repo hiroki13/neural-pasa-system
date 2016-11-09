@@ -1,4 +1,6 @@
-from copy import deepcopy, copy
+import sys
+import time
+from copy import copy
 
 import numpy as np
 
@@ -33,9 +35,15 @@ class Decoder(object):
         return best_list
 
     def decode_n_best(self, all_prob_lists, all_prd_indices, N):
+        start = time.time()
         n_best_lists = []
-        for prob_lists, prd_indices in zip(all_prob_lists, all_prd_indices):
+        print '\t',
+        for index, (prob_lists, prd_indices) in enumerate(zip(all_prob_lists, all_prd_indices)):
+            if index != 0 and index % 1000 == 0:
+                print index,
+                sys.stdout.flush()
             n_best_lists.append(self.decode_n_best_each(prob_lists, N))
+        print '\tTime: %f' % (time.time() - start)
         return n_best_lists
 
     def decode_n_best_each(self, prob_lists, N):
