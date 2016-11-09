@@ -334,3 +334,81 @@ class RerankingModel(Model):
         nll = hinge_loss(pos_scores, neg_scores)
         cost = nll + reg * L2_sqr(self.params) / 2.
         return nll, cost
+
+
+class GridModel(Model):
+
+    def __init__(self, argv, emb, n_vocab, n_labels):
+        super(GridModel, self).__init__(argv, emb, n_vocab, n_labels)
+        self.emb_connected_layer = None
+
+    def compile(self, x_w, x_p, y):
+        """
+        :param x_w: 1D: batch, 2D: n_prds, 3D: n_words, 4D: 5+window; word id
+        :param x_p: 1D: batch, 2D: n_prds, 3D: n_words; posit id
+        :param y: 1D: batch, 2D: n_prds, 3D: n_words; elem=label id
+        """
+        argv = self.argv
+        self.inputs = [x_w, x_p, y]
+
+        self.set_layers(self.emb)
+        self.set_params()
+
+        x = self.emb_layer_forward(x_w, x_p)
+        h = self.hidden_layer_forward(x)
+        h = self.output_layer_forward(h)
+
+        self.y_pred = self.output_layer.decode(h)
+        self.y_gold = y.reshape(self.y_pred.shape)
+        self.y_prob = h.dimshuffle(1, 0, 2)
+
+        self.nll, self.cost = self.objective_f(h=h, reg=argv.reg)
+        self.update = self.optimize(cost=self.cost, opt=argv.opt, lr=argv.lr)
+
+    def set_layers(self, init_emb):
+        argv = self.argv
+        dim_emb = argv.dim_emb if init_emb is None else len(init_emb[0])
+        dim_posit = argv.dim_posit
+        dim_in = dim_emb * (5 + argv.window) + dim_posit
+        dim_h = argv.dim_hidden
+        dim_out = self.n_labels
+
+        self.emb_layer = EmbeddingLayer(init_emb=init_emb, n_vocab=self.n_vocab, dim_emb=dim_emb,
+                                        n_posit=2, dim_posit=dim_posit, fix=argv.fix)
+        self.emb_connected_layer = ConnectedLayer(n_i=dim_in, n_h=dim_h)
+        self.hidden_layers = GridNetwork(unit=argv.unit, depth=argv.layers, n_in=dim_h, n_h=dim_h)
+        self.output_layer = Layer(n_i=dim_h, n_labels=dim_out)
+
+        self.layers.append(self.emb_layer)
+        self.layers.append(self.emb_connected_layer)
+        self.layers.extend(self.hidden_layers.layers)
+        self.layers.append(self.output_layer)
+        say('No. of rnn layers: %d\n' % (len(self.layers)-3))
+
+    def emb_layer_forward(self, x_w, x_p):
+        """
+        :param x_w: 1D: batch, 2D: n_prds, 3D: n_words, 4D: 5+window; word id
+        :param x_p: 1D: batch, 2D: n_prds, 3D: n_words; 0/1
+        :return: 1D: batch, 2D: n_prds, 3D: n_words, 4D: dim_in
+        """
+        x_w = self.emb_layer.forward_word(x_w).reshape((x_w.shape[0], x_w.shape[1], x_w.shape[2], -1))
+        x_p = self.emb_layer.forward_posit(x_p)
+        return T.concatenate([x_w, x_p], axis=3)
+
+    def hidden_layer_forward(self, x):
+        """
+        :param x: 1D: batch, 2D: n_prds, 3D: n_words, 4D: dim_in
+        :return: 1D: batch, 2D: n_prds, 3D: n_words, 4D: dim_h
+        """
+        h = self.emb_connected_layer.dot(x)
+        return self.hidden_layers.forward(h)
+
+    def output_layer_forward(self, x):
+        """
+        :param x: 1D: batch, 2D: n_prds, 3D: n_words, 4D: dim_h
+        :return: 1D: n_words, 2D: batch * n_prds, 3D: n_labels; log probability of a label
+        """
+        x = x.reshape((x.shape[0] * x.shape[1], x.shape[2], x.shape[3]))
+        x = x.dimshuffle(1, 0, 2)
+        return self.layers[-1].forward(x)
+

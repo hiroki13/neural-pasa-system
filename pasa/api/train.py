@@ -5,9 +5,9 @@ import theano
 
 from abc import ABCMeta
 from ..utils.io_utils import say, dump_data, load_data, move_data, load_dir
-from ..utils.preprocessor import Preprocessor, RankingPreprocessor, RerankingPreprocessor
+from ..utils.preprocessor import Preprocessor, RankingPreprocessor, RerankingPreprocessor, GridPreprocessor
 from ..ling.vocab import Vocab, PAD, UNK
-from ..model.model_api import ModelAPI, RankingModelAPI, NBestModelAPI, RerankingModelAPI
+from ..model.model_api import ModelAPI, RankingModelAPI, NBestModelAPI, RerankingModelAPI, GridModelAPI
 
 
 class Trainer(object):
@@ -321,6 +321,34 @@ class RerankingTrainer(Trainer):
                             untrainable_emb=self.untrainable_emb)
 
 
+class GridTrainer(Trainer):
+    def __init__(self, argv, preprocessor):
+        super(GridTrainer, self).__init__(argv, preprocessor)
+
+    def _setup_samples(self):
+        self.preprocessor.set_sample_factory(self.vocab_word, self.vocab_label)
+        sample_set = self.preprocessor.create_sample_set(self.corpus_set)
+
+        self.train_samples = self.preprocessor.create_shared_samples(sample_set[0])
+        self.dev_samples = sample_set[1]
+        self.test_samples = sample_set[2]
+
+    def train_model(self):
+        say('\n\nTRAINING A GRID MODEL\n')
+        model_api = self.model_api = GridModelAPI(argv=self.argv,
+                                                  emb=self.trainable_emb,
+                                                  vocab_word=self.vocab_word,
+                                                  vocab_label=self.vocab_label)
+
+        model_api.compile()
+
+        model_api.train_all(argv=self.argv,
+                            train_samples=self.train_samples,
+                            dev_samples=self.dev_samples,
+                            test_samples=self.test_samples,
+                            untrainable_emb=self.untrainable_emb)
+
+
 def select_trainer(argv):
     if argv.model == 'base':
         return Trainer(argv, Preprocessor(argv))
@@ -332,6 +360,8 @@ def select_trainer(argv):
         return TrainCorpusSeparator(argv, Preprocessor(argv))
     elif argv.model == 'rerank':
         return RerankingTrainer(argv, RerankingPreprocessor(argv))
+    elif argv.model == 'grid':
+        return GridTrainer(argv, GridPreprocessor(argv))
     return NBestTrainer(argv, Preprocessor(argv))
 
 

@@ -210,7 +210,7 @@ class Layer(object):
     @staticmethod
     def get_y_prob(h, y):
         """
-        :param h: 1D: n_words * batch, 2D: n_labels
+        :param h: 1D: n_words, 2D: batch, 3D: n_labels
         :param y: 1D: n_words, 2D: batch
         :return: 1D: batch; log probability of the correct sequence
         """
@@ -220,7 +220,7 @@ class Layer(object):
     @staticmethod
     def decode(h):
         """
-        :param h: 1D: n_words * batch, 2D: n_labels; log probability of a label
+        :param h: 1D: n_words, 2D: batch, 3D: n_labels; log probability of a label
         :return: 1D: batch, 2D: n_words; the highest scoring sequence (label id)
         """
         return T.argmax(h, axis=2).dimshuffle(1, 0)

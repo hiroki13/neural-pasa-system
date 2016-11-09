@@ -9,7 +9,7 @@ import numpy as np
 import theano
 import theano.tensor as T
 
-from model import Model, RankingModel, RerankingModel
+from model import Model, RankingModel, RerankingModel, GridModel
 from ..utils.io_utils import say, move_data
 from ..utils.eval import Eval
 from ..decoder.decoder import Decoder
@@ -696,4 +696,140 @@ class RerankingModelAPI(ModelAPI):
         if not os.path.exists('data/rerank'):
             os.mkdir('data/rerank')
         return 'data/rerank/'
+
+
+class GridModelAPI(ModelAPI):
+
+    def __init__(self, argv, emb, vocab_word, vocab_label):
+        super(GridModelAPI, self).__init__(argv, emb, vocab_word, vocab_label)
+
+    def set_model(self):
+        self.model = GridModel(argv=self.argv,
+                               emb=self.emb,
+                               n_vocab=self.vocab_word.size(),
+                               n_labels=self.vocab_label.size())
+
+    def compile_model(self):
+        # x_w: 1D: batch, 2D: n_prds, 3D: n_words, 4D: 5 + window; elem=word id
+        # x_p: 1D: batch, 2D: n_prds, 3D: n_words; elem=posit id
+        # y: 1D: batch, 2D: n_prds, 3D: n_words; elem=label id
+        self.model.compile(x_w=T.itensor4('x_w'),
+                           x_p=T.itensor3('x_p'),
+                           y=T.itensor3('y'))
+
+    def set_train_f(self, samples):
+        model = self.model
+        self.train = theano.function(inputs=model.inputs,
+                                     outputs=[model.y_pred, model.y_gold, model.nll],
+                                     updates=model.update,
+                                     )
+
+    def set_predict_f(self):
+        model = self.model
+        self.predict = theano.function(inputs=model.inputs,
+                                       outputs=model.y_prob,
+                                       on_unused_input='ignore'
+                                       )
+
+    def train_all(self, argv, train_samples, dev_samples, test_samples, untrainable_emb=None):
+        say('\n\nTRAINING START\n\n')
+
+        f1_history = {}
+        best_dev_f1 = -1.
+        for epoch in xrange(argv.epoch):
+            say('\nEpoch: %d\n' % (epoch + 1))
+            print '  TRAIN\n\t',
+
+            self.train_each(train_samples)
+
+            ###############
+            # Development #
+            ###############
+            if untrainable_emb is not None:
+                trainable_emb = self.model.emb_layer.word_emb.get_value(True)
+                self.model.emb_layer.word_emb.set_value(np.r_[trainable_emb, untrainable_emb])
+
+            update = False
+            if dev_samples:
+                print '\n  DEV\n\t',
+                dev_results, dev_results_prob = self.predict_all(dev_samples)
+                dev_f1 = self.eval_all(dev_results, dev_samples)
+                if best_dev_f1 < dev_f1:
+                    best_dev_f1 = dev_f1
+                    f1_history[epoch+1] = [best_dev_f1]
+                    update = True
+
+                    if argv.save:
+                        self.save()
+
+            ########
+            # Test #
+            ########
+            if test_samples:
+                print '\n  TEST\n\t',
+                test_results, test_results_prob = self.predict_all(test_samples)
+                test_f1 = self.eval_all(test_results, test_samples)
+                if update:
+                    if epoch+1 in f1_history:
+                        f1_history[epoch+1].append(test_f1)
+                    else:
+                        f1_history[epoch+1] = [test_f1]
+
+            if untrainable_emb is not None:
+                self.model.emb_layer.word_emb.set_value(trainable_emb)
+
+            ###########
+            # Results #
+            ###########
+            say('\n\n\tF1 HISTORY')
+            for k, v in sorted(f1_history.items()):
+                if len(v) == 2:
+                    say('\n\tEPOCH-{:d}  \tBEST DEV F:{:.2%}\tBEST TEST F:{:.2%}'.format(k, v[0], v[1]))
+                else:
+                    say('\n\tEPOCH-{:d}  \tBEST DEV F:{:.2%}'.format(k, v[0]))
+            say('\n\n')
+
+    def train_each(self, train_samples):
+        tr_indices = range(len(train_samples))
+        np.random.shuffle(tr_indices)
+        train_eval = Eval()
+        start = time.time()
+
+        for index, b_index in enumerate(tr_indices):
+            if index != 0 and index % 1000 == 0:
+                print index,
+                sys.stdout.flush()
+
+            x_w, x_p, y = train_samples[b_index]
+            result_sys, result_gold, nll = self.train(x_w, x_p, y)
+            assert not math.isnan(nll), 'NLL is NAN: Index: %d' % index
+
+            train_eval.update_results(result_sys, result_gold)
+            train_eval.nll += nll
+
+        print '\tTime: %f' % (time.time() - start)
+        train_eval.show_results()
+
+    def predict_all(self, samples):
+        all_best_lists = []
+        all_prob_lists = []
+        start = time.time()
+
+        for index, sample in enumerate(samples):
+            if index != 0 and index % 1000 == 0:
+                print index,
+                sys.stdout.flush()
+
+            if sample.n_prds == 0:
+                all_best_lists.append([])
+                all_prob_lists.append([])
+                continue
+
+            prob_lists = self.predict([sample.x_w], [sample.x_p], [sample.y])
+            best_list = self.decode_argmax(prob_lists=prob_lists, prd_indices=sample.prd_indices)
+            all_best_lists.append(best_list)
+            all_prob_lists.append(prob_lists)
+
+        print '\tTime: %f' % (time.time() - start)
+        return all_best_lists, all_prob_lists
 

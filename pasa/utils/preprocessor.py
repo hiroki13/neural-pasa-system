@@ -1,5 +1,5 @@
 from ..ling.vocab import Vocab, UNK
-from ..utils.sample_factory import BasicSampleFactory, RankingSampleFactory, RerankingSampleFactory
+from ..utils.sample_factory import BasicSampleFactory, RankingSampleFactory, RerankingSampleFactory, GridSampleFactory
 from io_utils import CorpusLoader, say, load_data, load_init_emb
 from stats import corpus_statistics, sample_statistics
 
@@ -123,3 +123,14 @@ class RerankingPreprocessor(Preprocessor):
                                                      batch_size=self.argv.batch_size,
                                                      window_size=self.argv.window)
 
+
+class GridPreprocessor(Preprocessor):
+
+    def __init__(self, argv):
+        super(GridPreprocessor, self).__init__(argv)
+
+    def set_sample_factory(self, vocab_word, vocab_label):
+        self.sample_factory = GridSampleFactory(vocab_word=vocab_word,
+                                                vocab_label=vocab_label,
+                                                batch_size=self.argv.batch_size,
+                                                window_size=self.argv.window)

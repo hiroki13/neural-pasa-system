@@ -2,7 +2,7 @@ import numpy as np
 import theano
 
 from abc import ABCMeta, abstractmethod
-from ..ling.sample import Sample, RankingSample, RerankingSample
+from ..ling.sample import Sample, RankingSample, RerankingSample, GridSample
 
 
 class SampleFactory(object):
@@ -232,3 +232,46 @@ class RerankingSampleFactory(SampleFactory):
         np.random.shuffle(corpus)
         corpus.sort(key=lambda s: len(s.words))
         return corpus
+
+
+class GridSampleFactory(SampleFactory):
+
+    def create_sample(self, sent):
+        return GridSample(sent=sent, window=self.window)
+
+    def create_shared_batch_samples(self, samples):
+        """
+        :param samples: 1D: n_sents; Sample
+        """
+        n_elems = 3
+        batches = []
+        batch = [[] for i in xrange(n_elems)]
+
+        samples = [sample for sample in samples if sample.n_prds > 0]
+        prev_n_prds = samples[0].n_prds
+        prev_n_words = samples[0].n_words
+
+        for sample in samples:
+            if self.is_batch_boundary(sample.n_words, prev_n_words,
+                                      sample.n_prds, prev_n_prds,
+                                      len(batch[2]), self.batch_size):
+                prev_n_prds = sample.n_prds
+                prev_n_words = sample.n_words
+                batches.append(batch)
+                batch = [[] for i in xrange(n_elems)]
+
+            batch[0].append(sample.x_w)
+            batch[1].append(sample.x_p)
+            batch[2].append(sample.y)
+
+        if len(batch[0]) > 0:
+            batches.append(batch)
+
+        return batches
+
+    @staticmethod
+    def is_batch_boundary(n_words, prev_n_words, n_prds, prev_n_prds, n_batches, batch_size):
+        if prev_n_words != n_words or n_prds != prev_n_prds or n_batches >= batch_size:
+            return True
+        return False
+

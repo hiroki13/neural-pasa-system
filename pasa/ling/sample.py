@@ -195,3 +195,22 @@ class RerankingSample(Sample):
         self.x_p = self._numpize(posit_phi)
         self.x_l = self._numpize(self.n_best_list.lists)
         self.y = self._numpize(self._get_max_f1_list_index(self.n_best_list))
+
+
+class GridSample(Sample):
+
+    def __init__(self, sent, window):
+        super(GridSample, self).__init__(sent, window)
+
+    def set_params(self, vocab_word, vocab_label):
+        self.set_word_ids(vocab_word)
+        self.set_label_ids(vocab_label)
+        word_phi = self.get_word_phi()
+        posit_phi = self.get_posit_phi()
+        self.set_x_y(word_phi, posit_phi)
+
+    def set_x_y(self, word_phi, posit_phi):
+        assert len(word_phi) == len(posit_phi)
+        self.x_w = self._numpize(word_phi)
+        self.x_p = self._numpize(posit_phi)
+        self.y = self._numpize(self.label_ids)
