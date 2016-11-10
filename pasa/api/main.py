@@ -33,6 +33,7 @@ if __name__ == '__main__':
     ###########
     parser.add_argument('--output_fn', type=str, default=None, help='Output file name')
     parser.add_argument('--output_dir', type=str, default=None, help='Output directory name')
+    parser.add_argument('--pretrain', type=int, default=0, help='Output pretrained rep')
 
     #########
     # Model #

@@ -31,6 +31,7 @@ class Model(object):
         self.y_prob = None
         self.y_gold = None
         self.y_pred = None
+        self.hidden_reps = None
         self.nll = None
         self.cost = None
 
@@ -44,56 +45,50 @@ class Model(object):
         self.params = []
         self.update = None
 
-    def compile(self, x_w, x_p, y, n_words, n_prds=None):
+    def compile(self, x_w, x_p, y):
         argv = self.argv
-        batch_size = x_w.shape[0] / n_words
 
         ###################
         # Input variables #
         ###################
-        if n_prds:
-            self.inputs = [x_w, x_p, y, n_words, n_prds]
-        else:
-            self.inputs = [x_w, x_p, y, n_words]
+        self.inputs = [x_w, x_p, y]
 
         self.dropout = theano.shared(np.float32(argv.dropout).astype(theano.config.floatX))
-        self.set_layers(x_w, n_words, self.emb)
+        self.set_layers(self.emb)
         self.set_params()
 
         ############
         # Networks #
         ############
-        x = self.emb_layer_forward(x_w, x_p, batch_size, n_words)
+        x = self.emb_layer_forward(x_w, x_p)
         h = self.hidden_layer_forward(x)
-        h = self.output_layer_forward(h)
+        o = self.output_layer_forward(h)
 
         ###########
         # Outputs #
         ###########
-        self.y_gold = y.reshape((batch_size, n_words))
-        self.y_pred = self.output_layer.decode(h)
-        self.y_prob = h.dimshuffle(1, 0, 2)
+        self.y_gold = y
+        self.y_pred = self.output_layer.decode(o)
+        self.y_prob = o.dimshuffle(1, 0, 2)
+        self.hidden_reps = h
 
         ############
         # Training #
         ############
-        self.nll, self.cost = self.objective_f(h=h, reg=argv.reg)
+        self.nll, self.cost = self.objective_f(o=o, reg=argv.reg)
         self.update = self.optimize(cost=self.cost, opt=argv.opt, lr=argv.lr)
 
-    def set_layers(self, x_w, n_words, init_emb):
+    def set_layers(self, init_emb):
         argv = self.argv
         dim_emb = argv.dim_emb if init_emb is None else len(init_emb[0])
         dim_posit = argv.dim_posit
         dim_in = dim_emb * (5 + argv.window) + dim_posit
         dim_h = argv.dim_hidden
         dim_out = self.n_labels
-        n_vocab = self.n_vocab
-        unit = argv.unit
-        fix = argv.fix
-        n_layers = argv.layers
 
-        self.emb_layer = EmbeddingLayer(n_vocab=n_vocab, dim_emb=dim_emb, init_emb=init_emb, dim_posit=dim_posit, fix=fix)
-        self.hidden_layers = RNNLayers(unit=unit, depth=n_layers, n_in=dim_in, n_h=dim_h)
+        self.emb_layer = EmbeddingLayer(n_vocab=self.n_vocab, dim_emb=dim_emb, init_emb=init_emb,
+                                        dim_posit=dim_posit, fix=argv.fix)
+        self.hidden_layers = RNNLayers(unit=argv.unit, depth=argv.layers, n_in=dim_in, n_h=dim_h)
 
         if self.argv.output_layer == 0:
             self.output_layer = Layer(n_i=dim_h, n_labels=dim_out)
@@ -112,14 +107,14 @@ class Model(object):
             self.params += l.params
         say("No. of parameters: {}\n".format(sum(len(x.get_value(borrow=True).ravel()) for x in self.params)))
 
-    def emb_layer_forward(self, x_w, x_p, batch, n_words):
+    def emb_layer_forward(self, x_w, x_p):
         """
-        :param x_w: 1D: batch * n_words, 2D: 5 + window; elem=word_id
-        :param x_p: 1D: batch * n_words; elem=posit_id
+        :param x_w: 1D: batch, 2D: n_words, 3D: 5 + window; word id
+        :param x_p: 1D: batch, 2D: n_words; posit id
         :return: 1D: batch, 2D: n_words, 3D: dim_in (dim_emb * (5 + window + 1))
         """
-        x_w = self.emb_layer.forward_word(x_w).reshape((batch, n_words, -1))
-        x_p = self.emb_layer.forward_posit(x_p).reshape((batch, n_words, -1))
+        x_w = self.emb_layer.forward_word(x_w).reshape((x_w.shape[0], x_w.shape[1], -1))
+        x_p = self.emb_layer.forward_posit(x_p)
         return T.concatenate([x_w, x_p], axis=2)
 
     def hidden_layer_forward(self, x):
@@ -132,15 +127,15 @@ class Model(object):
     def output_layer_forward(self, x):
         """
         :param x: 1D: n_words, 2D: batch, 3D: dim_h
-        :return: 1D: n_words, 2D: batch, 3D: dim_h
+        :return: 1D: n_words, 2D: batch, 3D: n_labels
         """
         h = self.layers[-1].forward(x)
         if (len(self.layers) - 3) % 2 == 0:
             h = h[::-1]
         return h
 
-    def objective_f(self, h, reg):
-        p_y = self.output_layer.get_y_prob(h, self.y_gold.dimshuffle((1, 0)))
+    def objective_f(self, o, reg):
+        p_y = self.output_layer.get_y_prob(o, self.y_gold.dimshuffle((1, 0)))
         nll = - T.mean(p_y)
         cost = nll + reg * L2_sqr(self.params) / 2.
         return nll, cost
@@ -191,7 +186,7 @@ class RankingModel(Model):
         ############
         # Training #
         ############
-        self.nll, self.cost = self.objective_f(h=h, reg=argv.reg)
+        self.nll, self.cost = self.objective_f(o=h, reg=argv.reg)
         self.update = self.optimize(cost=self.cost, opt=argv.opt, lr=argv.lr)
 
     def set_layers(self, x_w, n_words, init_emb):
@@ -215,9 +210,9 @@ class RankingModel(Model):
         self.layers.append(self.output_layer)
         say('No. of rnn layers: %d\n' % (len(self.layers)-3))
 
-    def objective_f(self, h, reg):
-        pos_scores = self.output_layer.get_y_scores(h, self.y_gold)
-        neg_scores = self.output_layer.get_y_hat_scores(h)
+    def objective_f(self, o, reg):
+        pos_scores = self.output_layer.get_y_scores(o, self.y_gold)
+        neg_scores = self.output_layer.get_y_hat_scores(o)
         nll = hinge_loss(pos_scores, neg_scores)
         cost = nll + reg * L2_sqr(self.params) / 2.
         return nll, cost
@@ -261,7 +256,7 @@ class RerankingModel(Model):
         ############
         # Training #
         ############
-        self.nll, self.cost = self.objective_f(h=h, reg=argv.reg)
+        self.nll, self.cost = self.objective_f(o=h, reg=argv.reg)
         self.update = self.optimize(cost=self.cost, opt=argv.opt, lr=argv.lr)
 
     def set_layers(self, init_emb):
@@ -328,9 +323,9 @@ class RerankingModel(Model):
         h = h.reshape((h.shape[0], h.shape[1]))
         return T.sum(h, axis=1)
 
-    def objective_f(self, h, reg):
-        pos_scores = h[T.arange(h.shape[0]), self.y_gold]
-        neg_scores = h[T.arange(h.shape[0]), self.y_pred]
+    def objective_f(self, o, reg):
+        pos_scores = o[T.arange(o.shape[0]), self.y_gold]
+        neg_scores = o[T.arange(o.shape[0]), self.y_pred]
         nll = hinge_loss(pos_scores, neg_scores)
         cost = nll + reg * L2_sqr(self.params) / 2.
         return nll, cost
@@ -362,7 +357,7 @@ class GridModel(Model):
         self.y_gold = y.reshape(self.y_pred.shape)
         self.y_prob = h.dimshuffle(1, 0, 2)
 
-        self.nll, self.cost = self.objective_f(h=h, reg=argv.reg)
+        self.nll, self.cost = self.objective_f(o=h, reg=argv.reg)
         self.update = self.optimize(cost=self.cost, opt=argv.opt, lr=argv.lr)
 
     def set_layers(self, init_emb):

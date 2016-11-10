@@ -18,29 +18,30 @@ from ..utils.nbl_factory import NBestListFactory
 
 class ModelAPI(object):
 
-    def __init__(self, argv, emb, vocab_word, vocab_label):
+    def __init__(self, argv):
         self.argv = argv
-        self.emb = emb
+        self.emb = None
         self.output_fn = None
         self.output_dir = None
-        self.vocab_word = vocab_word
-        self.vocab_label = vocab_label
+        self.vocab_word = None
+        self.vocab_label = None
 
         self.model = None
         self.decoder = None
         self.train = None
         self.predict = None
+        self.predict_hidden_rep = None
 
-    def compile(self, train_sample_shared=None):
+    def compile(self, vocab_word, vocab_label, init_emb=None):
         say('\n\nBuilding a model API...\n')
-        self.set_output()
+        self.emb = init_emb
+        self.vocab_word = vocab_word
+        self.vocab_label = vocab_label
         self.set_model()
-        self.compile_model()
         self.set_decoder()
-        self.set_train_f(train_sample_shared)
-        self.set_predict_f()
+        self.set_output_path()
 
-    def set_output(self):
+    def set_output_path(self):
         self.output_fn = self._set_output_fn()
         self.output_dir = self._set_output_dir()
 
@@ -49,33 +50,24 @@ class ModelAPI(object):
                            emb=self.emb,
                            n_vocab=self.vocab_word.size(),
                            n_labels=self.vocab_label.size())
+        self.compile_model()
 
     def compile_model(self):
-        # x: 1D: batch * n_words, 2D: 5 + window + 1; elem=word id
-        # y: 1D: batch * n_words; elem=label id
-        self.model.compile(x_w=T.imatrix('x_w'),
-                           x_p=T.ivector('x_p'),
-                           y=T.ivector('y'),
-                           n_words=T.iscalar('n_words'))
+        # x_w: 1D: batch, 2D: n_words, 3D: 5 + window; word id
+        # x_p: 1D: batch, 2D: n_words; posit id
+        # y: 1D: batch, 2D: n_words; label id
+        self.model.compile(x_w=T.itensor3('x_w'),
+                           x_p=T.imatrix('x_p'),
+                           y=T.imatrix('y'))
 
     def set_decoder(self):
         self.decoder = Decoder()
 
-    def set_train_f(self, samples):
-        index = T.iscalar('index')
-        bos = T.iscalar('bos')
-        eos = T.iscalar('eos')
-
+    def set_train_f(self):
         model = self.model
-        self.train = theano.function(inputs=[index, bos, eos],
+        self.train = theano.function(inputs=model.inputs,
                                      outputs=[model.y_pred, model.y_gold, model.nll],
-                                     updates=model.update,
-                                     givens={
-                                         model.inputs[0]: samples[0][bos: eos],
-                                         model.inputs[1]: samples[1][bos: eos],
-                                         model.inputs[2]: samples[2][bos: eos],
-                                         model.inputs[3]: samples[3][index],
-                                     }
+                                     updates=model.update
                                      )
 
     def set_predict_f(self):
@@ -85,75 +77,15 @@ class ModelAPI(object):
                                        on_unused_input='ignore'
                                        )
 
-    def train_all(self, argv, train_batch_index, dev_samples, test_samples, untrainable_emb=None):
-        say('\n\nTRAINING START\n\n')
+    def set_hidden_rep_f(self):
+        model = self.model
+        self.predict_hidden_rep = theano.function(inputs=model.inputs,
+                                                  outputs=model.hidden_reps,
+                                                  on_unused_input='ignore'
+                                                  )
 
-        n_train_batches = len(train_batch_index)
-        tr_indices = range(n_train_batches)
-
-        f1_history = {}
-        best_dev_f1 = -1.
-
-        for epoch in xrange(argv.epoch):
-            dropout_p = np.float32(argv.dropout).astype(theano.config.floatX)
-            self.model.dropout.set_value(dropout_p)
-
-            say('\nEpoch: %d\n' % (epoch + 1))
-            print '  TRAIN\n\t',
-
-            self.train_each(tr_indices, train_batch_index)
-
-            ###############
-            # Development #
-            ###############
-            if untrainable_emb is not None:
-                trainable_emb = self.model.emb_layer.word_emb.get_value(True)
-                self.model.emb_layer.word_emb.set_value(np.r_[trainable_emb, untrainable_emb])
-
-            update = False
-            if dev_samples:
-                print '\n  DEV\n\t',
-                dev_results, dev_results_prob = self.predict_all(dev_samples)
-                dev_f1 = self.eval_all(dev_results, dev_samples)
-                if best_dev_f1 < dev_f1:
-                    best_dev_f1 = dev_f1
-                    f1_history[epoch+1] = [best_dev_f1]
-                    update = True
-
-                    if argv.save:
-                        self.save()
-
-                    if argv.result:
-                        self.output_results('result.dev.txt', dev_samples)
-
-            ########
-            # Test #
-            ########
-            if test_samples:
-                print '\n  TEST\n\t',
-                test_results, test_results_prob = self.predict_all(test_samples)
-                test_f1 = self.eval_all(test_results, test_samples)
-                if update:
-                    if epoch+1 in f1_history:
-                        f1_history[epoch+1].append(test_f1)
-                    else:
-                        f1_history[epoch+1] = [test_f1]
-
-            if untrainable_emb is not None:
-                self.model.emb_layer.word_emb.set_value(trainable_emb)
-
-            ###########
-            # Results #
-            ###########
-            say('\n\n\tF1 HISTORY')
-            for k, v in sorted(f1_history.items()):
-                if len(v) == 2:
-                    say('\n\tEPOCH-{:d}  \tBEST DEV F:{:.2%}\tBEST TEST F:{:.2%}'.format(k, v[0], v[1]))
-                else:
-                    say('\n\tEPOCH-{:d}  \tBEST DEV F:{:.2%}'.format(k, v[0]))
-            say('\n\n')
-
-    def train_each(self, tr_indices, train_batch_index):
+    def train_each(self, samples):
+        tr_indices = range(len(samples))
         np.random.shuffle(tr_indices)
         train_eval = Eval()
         start = time.time()
@@ -163,9 +95,8 @@ class ModelAPI(object):
                 print index,
                 sys.stdout.flush()
 
-            batch_range = train_batch_index[b_index]
-            result_sys, result_gold, nll = self.train(index=b_index, bos=batch_range[0], eos=batch_range[1])
-
+            x_w, x_p, y = samples[b_index]
+            result_sys, result_gold, nll = self.train(x_w, x_p, y)
             assert not math.isnan(nll), 'NLL is NAN: Index: %d' % index
 
             train_eval.update_results(result_sys, result_gold)
@@ -178,7 +109,6 @@ class ModelAPI(object):
         all_best_lists = []
         all_prob_lists = []
         start = time.time()
-        self.model.dropout.set_value(0.0)
 
         for index, sample in enumerate(samples):
             if index != 0 and index % 1000 == 0:
@@ -190,13 +120,32 @@ class ModelAPI(object):
                 all_prob_lists.append([])
                 continue
 
-            prob_lists = self.predict(sample.x_w, sample.x_p, sample.y, sample.n_words)
+            prob_lists = self.predict(sample.x_w, sample.x_p, sample.y)
             best_list = self.decode_argmax(prob_lists=prob_lists, prd_indices=sample.prd_indices)
             all_best_lists.append(best_list)
             all_prob_lists.append(prob_lists)
 
         print '\tTime: %f' % (time.time() - start)
         return all_best_lists, all_prob_lists
+
+    def output_hidden_rep(self, samples):
+        all_hidden_reps = []
+        start = time.time()
+
+        for index, sample in enumerate(samples):
+            if index != 0 and index % 1000 == 0:
+                print index,
+                sys.stdout.flush()
+
+            if sample.n_prds == 0:
+                all_hidden_reps.append((sample, []))
+                continue
+
+            hidden_reps = self.predict(sample.x_w, sample.x_p, sample.y, sample.n_words)
+            all_hidden_reps.append((sample, hidden_reps))
+
+        print '\tTime: %f' % (time.time() - start)
+        self._save_hidden_rep(self.output_fn, self.output_dir, all_hidden_reps)
 
     def decode_argmax(self, prob_lists, prd_indices):
         assert len(prob_lists) == len(prd_indices)
@@ -319,6 +268,17 @@ class ModelAPI(object):
         output_dir += 'config'
         move_data(fn, output_dir)
 
+    @staticmethod
+    def _save_hidden_rep(fn, output_dir, data):
+        fn = 'pretrained.' + fn
+        if not fn.endswith(".pkl.gz"):
+            fn += ".gz" if fn.endswith(".pkl") else ".pkl.gz"
+        with gzip.open(fn, "w") as fout:
+            pickle.dump(data, fout,
+                        protocol=pickle.HIGHEST_PROTOCOL)
+        output_dir += 'pretrained'
+        move_data(fn, output_dir)
+
     def load_params(self, path):
         with gzip.open(path) as fin:
             params = pickle.load(fin)
@@ -432,7 +392,7 @@ class RankingModelAPI(ModelAPI):
                     say('\n\tEPOCH-{:d}  \tBEST DEV F:{:.2%}'.format(k, v[0]))
             say('\n\n')
 
-    def train_each(self, tr_indices, train_samples):
+    def train_each(self, tr_indices, samples):
         np.random.shuffle(tr_indices)
         train_eval = Eval()
         start = time.time()
@@ -442,7 +402,7 @@ class RankingModelAPI(ModelAPI):
                 print index,
                 sys.stdout.flush()
 
-            x_w, x_p, y, n_words = train_samples[b_index]
+            x_w, x_p, y, n_words = samples[b_index]
             result_sys, result_gold, nll = self.train(x_w, x_p, y, n_words)
 
             assert not math.isnan(nll), 'NLL is NAN: Index: %d' % index
@@ -623,8 +583,8 @@ class RerankingModelAPI(ModelAPI):
                     say('\n\tEPOCH-{:d}  \tBEST DEV F:{:.2%}'.format(k, v[0]))
             say('\n\n')
 
-    def train_each(self, train_samples):
-        tr_indices = range(len(train_samples))
+    def train_each(self, samples):
+        tr_indices = range(len(samples))
         np.random.shuffle(tr_indices)
         train_eval = Eval()
         start = time.time()
@@ -634,7 +594,7 @@ class RerankingModelAPI(ModelAPI):
                 print index,
                 sys.stdout.flush()
 
-            x_w, x_p, x_l, oracle_y, y = train_samples[b_index]
+            x_w, x_p, x_l, oracle_y, y = samples[b_index]
             result_sys, result_gold, nll = self.train(x_w, x_p, x_l, oracle_y)
             assert not math.isnan(nll), 'NLL is NAN: Index: %d' % index
 
@@ -789,8 +749,8 @@ class GridModelAPI(ModelAPI):
                     say('\n\tEPOCH-{:d}  \tBEST DEV F:{:.2%}'.format(k, v[0]))
             say('\n\n')
 
-    def train_each(self, train_samples):
-        tr_indices = range(len(train_samples))
+    def train_each(self, samples):
+        tr_indices = range(len(samples))
         np.random.shuffle(tr_indices)
         train_eval = Eval()
         start = time.time()
@@ -800,7 +760,7 @@ class GridModelAPI(ModelAPI):
                 print index,
                 sys.stdout.flush()
 
-            x_w, x_p, y = train_samples[b_index]
+            x_w, x_p, y = samples[b_index]
             result_sys, result_gold, nll = self.train(x_w, x_p, y)
             assert not math.isnan(nll), 'NLL is NAN: Index: %d' % index
 

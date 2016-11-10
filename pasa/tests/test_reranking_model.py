@@ -14,7 +14,7 @@ random.seed(0)
 def main(_argv):
     trainer = RerankingTrainer(_argv, RerankingPreprocessor(_argv))
     trainer.setup_training()
-    trainer.train_model()
+    trainer.train()
 
 
 if __name__ == '__main__':

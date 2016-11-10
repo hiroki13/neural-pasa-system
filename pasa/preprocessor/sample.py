@@ -1,5 +1,5 @@
 import numpy as np
-from vocab import UNK, NA, GA, O, NI, PRD, GA_LABEL, O_LABEL, NI_LABEL
+from ..ling.vocab import UNK, NA, GA, O, NI, PRD, GA_LABEL, O_LABEL, NI_LABEL
 
 
 class Sample(object):
@@ -28,6 +28,7 @@ class Sample(object):
         self.x_w = []
         self.x_p = []
         self.y = []
+        self.inputs = []
 
     def set_params(self, vocab_word, vocab_label):
         self.set_word_ids(vocab_word)
@@ -126,16 +127,10 @@ class Sample(object):
 
     def set_x_y(self, word_phi, posit_phi):
         assert len(word_phi) == len(posit_phi) == len(self.label_ids)
-        self.x_w = self._numpize(self._flatten(word_phi))
-        self.x_p = self._numpize(self._flatten(posit_phi))
-        self.y = self._numpize(self._flatten(self.label_ids))
-
-    @staticmethod
-    def _flatten(matrix):
-        vec = []
-        for row in matrix:
-            vec.extend(row)
-        return vec
+        self.x_w = self._numpize(word_phi)
+        self.x_p = self._numpize(posit_phi)
+        self.y = self._numpize(self.label_ids)
+        self.inputs = [self.x_w, self.x_p, self.y]
 
     @staticmethod
     def _numpize(sample):

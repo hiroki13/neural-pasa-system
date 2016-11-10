@@ -1,8 +1,7 @@
 import numpy as np
-import theano
 
 from abc import ABCMeta, abstractmethod
-from ..ling.sample import Sample, RankingSample, RerankingSample, GridSample
+from sample import Sample, RankingSample, RerankingSample, GridSample
 
 
 class SampleFactory(object):
@@ -18,19 +17,13 @@ class SampleFactory(object):
     def create_sample(self, sent):
         raise NotImplementedError()
 
-    def create_samples(self, corpus, test=False):
+    def create_samples(self, corpus):
         """
-        :param corpus: 1D: n_docs, 2D: n_sents, 3D: n_words; elem=Word
-        :param test: whether the corpus is for dev or test
+        :param corpus: 1D: n_docs * n_sents, 2D: n_words; elem=Word
         :return: samples: 1D: n_samples; Sample
         """
         if corpus is None:
             return None
-
-        # 1D: n_docs * n_sents, 2D: n_words; elem=Word
-        corpus = [sent for doc in corpus for sent in doc]
-        if test is False:
-            corpus = self._sort_by_n_words(corpus)
 
         samples = []
         for sent in corpus:
@@ -40,75 +33,73 @@ class SampleFactory(object):
 
         return samples
 
-    def create_shared_batch_samples(self, samples):
-        """
-        :param samples: 1D: n_sents; Sample
-        """
-        theano_x_w = []
-        theano_x_p = []
-        theano_y = []
-        sent_len = []
-        n_prds = []
-        batch_index = []
+    @staticmethod
+    def _sort_by_n_words(samples):
+        np.random.shuffle(samples)
+        samples.sort(key=lambda s: len(s[0]))
+        return samples
 
-        samples = [sample for sample in samples if sample.n_prds > 0]
-        prev_n_prds = samples[0].n_prds
-        prev_n_words = samples[0].n_words
-        prev_index = 0
-        index = 0
-
-        for sample in samples:
-            if self.is_batch_boundary(sample.n_words,
-                                      prev_n_words,
-                                      index,
-                                      prev_index,
-                                      self.batch_size):
-                batch_index.append((prev_index, index))
-                n_prds.append(prev_n_prds)
-                sent_len.append(prev_n_words)
-                prev_index = index
-                prev_n_prds = sample.n_prds
-                prev_n_words = sample.n_words
-
-            theano_x_w.extend(sample.x_w)
-            theano_x_p.extend(sample.x_p)
-            theano_y.extend(sample.y)
-            index += len(sample.x_w)
-
-        if index > prev_index:
-            batch_index.append((prev_index, index))
-            n_prds.append(prev_n_prds)
-            sent_len.append(prev_n_words)
-
-        assert len(batch_index) == len(sent_len) == len(n_prds)
-
-        return [self._shared(theano_x_w),
-                self._shared(theano_x_p),
-                self._shared(theano_y),
-                self._shared(sent_len),
-                self._shared(n_prds)], batch_index
+    def create_batched_samples(self, samples, n_inputs):
+        raise NotImplementedError()
 
     @staticmethod
-    def is_batch_boundary(n_words, prev_n_words, index, prev_index, batch_size):
-        if prev_n_words != n_words or index - prev_index > batch_size:
-            return True
-        return False
+    def _add_inputs_to_batch(batch, sample):
+        raise NotImplementedError()
 
     @staticmethod
-    def _sort_by_n_words(corpus):
-        np.random.shuffle(corpus)
-        corpus.sort(key=lambda s: len(s))
-        return corpus
+    def _is_batch_boundary(boundary_elems, batch_size):
+        raise NotImplementedError()
 
     @staticmethod
-    def _shared(matrix):
-        return theano.shared(np.asarray(matrix, dtype='int32'), borrow=True)
+    def separate_samples(samples):
+        return [elem for sample in samples for elem in zip(*sample.inputs)]
 
 
 class BasicSampleFactory(SampleFactory):
 
     def create_sample(self, sent):
         return Sample(sent=sent, window=self.window)
+
+    def create_batched_samples(self, samples, n_inputs):
+        """
+        :param samples: 1D: n_sents; Sample
+        """
+        batches = []
+        batch = [[] for i in xrange(n_inputs)]
+
+        samples = [sample for sample in samples if sample.n_prds > 0]
+        samples = self.separate_samples(samples)
+        samples = self._sort_by_n_words(samples)
+        prev_n_words = len(samples[0][0])
+
+        for sample in samples:
+            n_words = len(sample[0])
+            boundary_elems = (n_words, prev_n_words, len(batch[-1]))
+
+            if self._is_batch_boundary(boundary_elems, self.batch_size):
+                prev_n_words = n_words
+                batches.append(batch)
+                batch = [[] for i in xrange(n_inputs)]
+            batch = self._add_inputs_to_batch(batch, sample)
+
+        if len(batch[0]) > 0:
+            batches.append(batch)
+
+        return batches
+
+    @staticmethod
+    def _is_batch_boundary(boundary_elems, batch_size):
+        n_words, prev_n_words, n_batches = boundary_elems
+        if prev_n_words != n_words or n_batches >= batch_size:
+            return True
+        return False
+
+    @staticmethod
+    def _add_inputs_to_batch(batch, sample):
+        batch[0].append(sample[0])
+        batch[1].append(sample[1])
+        batch[2].append(sample[2])
+        return batch
 
 
 class RankingSampleFactory(SampleFactory):
@@ -182,8 +173,10 @@ class RerankingSampleFactory(SampleFactory):
             corpus = self._sort_by_n_words(corpus)
 
         samples = []
-        for sent in corpus:
-            sample = self.create_sample(sent=sent)
+        for n_best_list in corpus:
+            if len(n_best_list.lists) == 0:
+                continue
+            sample = self.create_sample(sent=n_best_list)
             sample.set_params(self.vocab_word, self.vocab_label)
             samples.append(sample)
 
@@ -228,10 +221,10 @@ class RerankingSampleFactory(SampleFactory):
         return False
 
     @staticmethod
-    def _sort_by_n_words(corpus):
-        np.random.shuffle(corpus)
-        corpus.sort(key=lambda s: len(s.words))
-        return corpus
+    def _sort_by_n_words(samples):
+        np.random.shuffle(samples)
+        samples.sort(key=lambda s: len(s.words))
+        return samples
 
 
 class GridSampleFactory(SampleFactory):

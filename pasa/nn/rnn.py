@@ -110,12 +110,15 @@ class GridNetwork(RNNLayers):
         :param h: 1D: batch, 2D: n_prds, 3D: n_words, 4D: dim_h
         :return: 1D: batch, 2D: n_prds, 3D: n_words, 4D: dim_h
         """
-        h0 = T.zeros(h.shape, dtype=theano.config.floatX)
+        hf0 = T.zeros((h.shape[0], h.shape[1], h.shape[3]), dtype=theano.config.floatX)
+        hb0 = T.zeros((h.shape[0], h.shape[1], h.shape[3]), dtype=theano.config.floatX)
+        hu0 = T.zeros((h.shape[0], h.shape[2], h.shape[3]), dtype=theano.config.floatX)
+        hd0 = T.zeros((h.shape[0], h.shape[2], h.shape[3]), dtype=theano.config.floatX)
         for i in xrange(0, self.depth):
-            hf = self.forward_all(self.layers[i*5], h, h0)
-            hb = self.backward_all(self.layers[(i*5)+1], h, h0)
-            hu = self.upward_all(self.layers[(i*5)+2], h, h0)
-            hd = self.downward_all(self.layers[(i*5)+3], h, h0)
+            hf = self.forward_all(self.layers[i*5], h, hf0)
+            hb = self.backward_all(self.layers[(i*5)+1], h, hb0)
+            hu = self.upward_all(self.layers[(i*5)+2], h, hu0)
+            hd = self.downward_all(self.layers[(i*5)+3], h, hd0)
             h = h + self.dot(self.layers[(i*5)+4], hf, hb, hu, hd)
         return h
 
@@ -127,13 +130,11 @@ class GridNetwork(RNNLayers):
         :return: 1D: n_words, 2D: batch, 3D: n_prds, 4D: dim_h
         """
         x = x.dimshuffle(2, 0, 1, 3)
-        h = h[:, :, 0]
         return layer.forward_all(x, h)
 
     @staticmethod
     def backward_all(layer, x, h):
         x = x.dimshuffle(2, 0, 1, 3)
-        h = h[:, :, -1]
         return layer.forward_all(x[::-1], h)
 
     @staticmethod
@@ -144,15 +145,11 @@ class GridNetwork(RNNLayers):
         :return: 1D: n_prds, 2D: batch, 3D: n_words, 4D: dim_h
         """
         x = x.dimshuffle(1, 0, 2, 3)
-        h = h.dimshuffle(0, 2, 1, 3)
-        h = h[:, :, 0]
         return layer.forward_all(x, h)
 
     @staticmethod
     def downward_all(layer, x, h):
         x = x.dimshuffle(1, 0, 2, 3)
-        h = h.dimshuffle(0, 2, 1, 3)
-        h = h[:, :, -1]
         return layer.forward_all(x[::-1], h)
 
     @staticmethod

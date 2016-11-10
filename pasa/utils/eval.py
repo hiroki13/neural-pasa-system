@@ -91,6 +91,7 @@ class Eval(object):
     def select_best_f1_list(self, n_best_list, batch_y):
         best_list = None
         best_f1 = -100.0
+        assert len(n_best_list) != 0
         for n_th_list in n_best_list:
             corrects = [0.0 for i in xrange(3)]
             results_sys = [0.0 for i in xrange(3)]
