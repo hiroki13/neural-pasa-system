@@ -20,6 +20,9 @@ class EpochManager(object):
 
             if argv.model == 'base' or argv.model == 'nbest':
                 train_samples = self.shuffle_batches(train_samples, 3)
+            else:
+                train_samples = self.shuffle_batches_stack(train_samples, 3)
+
             self._train_one_epoch(model_api, train_samples)
             dev_results, update, trainable_emb = self._validate(epoch, model_api, dev_samples, untrainable_emb)
             test_results = self._test(epoch, model_api, test_samples, update)
@@ -86,9 +89,6 @@ class EpochManager(object):
         say('\n\n')
 
     def shuffle_batches(self, batches, n_inputs):
-        """
-        :param batches: 1D: n_sents; Sample
-        """
         new_batches = []
         batch = [[] for i in xrange(n_inputs)]
 
@@ -111,6 +111,33 @@ class EpochManager(object):
 
         return new_batches
 
+    def shuffle_batches_stack(self, batches, n_inputs):
+        new_batches = []
+        batch = [[] for i in xrange(n_inputs)]
+
+        samples = self.separate_batches(batches)
+        samples = self._sort_by_n_words_stack(samples)
+        prev_n_prds = len(samples[0][2])
+        prev_n_words = len(samples[0][2][0])
+
+        for sample in samples:
+            n_prds = len(sample[2])
+            n_words = len(sample[2][0])
+            if self.is_batch_boundary_stack(n_words, prev_n_words,
+                                            n_prds, prev_n_prds,
+                                            len(batch[2]), self.argv.batch_size):
+                prev_n_prds = n_prds
+                prev_n_words = n_words
+                new_batches.append(batch)
+                batch = [[] for i in xrange(n_inputs)]
+
+            batch = self._add_inputs_to_batch(batch, sample)
+
+        if len(batch[0]) > 0:
+            new_batches.append(batch)
+
+        return new_batches
+
     @staticmethod
     def separate_batches(batches):
         return [elem for batch in batches for elem in zip(*batch)]
@@ -123,14 +150,28 @@ class EpochManager(object):
         return False
 
     @staticmethod
-    def _add_inputs_to_batch(batch, sample):
-        batch[0].append(sample[0])
-        batch[1].append(sample[1])
-        batch[2].append(sample[2])
-        return batch
+    def is_batch_boundary_stack(n_words, prev_n_words, n_prds, prev_n_prds, n_batches, batch_size):
+        if prev_n_words != n_words or n_prds != prev_n_prds or n_batches >= batch_size:
+            return True
+        return False
 
     @staticmethod
     def _sort_by_n_words(samples):
         np.random.shuffle(samples)
         samples.sort(key=lambda s: len(s[0]))
         return samples
+
+    @staticmethod
+    def _sort_by_n_words_stack(samples):
+        np.random.shuffle(samples)
+        samples.sort(key=lambda s: len(s[2]))
+        samples.sort(key=lambda s: len(s[2][0]))
+        return samples
+
+    @staticmethod
+    def _add_inputs_to_batch(batch, sample):
+        batch[0].append(sample[0])
+        batch[1].append(sample[1])
+        batch[2].append(sample[2])
+        return batch
+

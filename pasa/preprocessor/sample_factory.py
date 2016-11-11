@@ -162,6 +162,7 @@ class StackingSampleFactory(BasicSampleFactory):
     @staticmethod
     def _sort_by_n_words(samples):
         np.random.shuffle(samples)
+        samples.sort(key=lambda s: s.n_prds)
         samples.sort(key=lambda s: s.n_words)
         return samples
 
