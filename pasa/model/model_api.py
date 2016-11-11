@@ -9,7 +9,7 @@ import numpy as np
 import theano
 import theano.tensor as T
 
-from model import Model, RerankingModel, GridModel
+from model import Model, StackingModel, RerankingModel, GridModel
 from result import Results
 from ..utils.io_utils import say, move_data
 from ..utils.eval import Eval
@@ -115,7 +115,10 @@ class ModelAPI(object):
                 sys.stdout.flush()
 
             if sample.n_prds == 0:
-                results.add((sample, [], []))
+                if self.argv.output == 'pretrain':
+                    results.add((sample, [[], []], []))
+                else:
+                    results.add((sample, [], []))
                 continue
 
             model_outputs = self.predict(sample.x_w, sample.x_p, sample.y)
@@ -143,16 +146,31 @@ class ModelAPI(object):
     def _set_output_fn(self):
         argv = self.argv
         if argv.output_fn is None:
-            return 'model-%s.layers-%d' % (argv.model, argv.layers)
-        return argv.output_fn
+            output_fn = 'model-%s.layers-%d' % (argv.model, argv.layers)
+        else:
+            return argv.output_fn
+
+        if argv.model == 'jack':
+            if argv.sec is None:
+                output_fn += '.all'
+            else:
+                output_fn += '.sec-%d' % argv.sec
+
+        return output_fn
 
     def _set_output_dir(self):
         argv = self.argv
         if argv.output_dir is not None and os.path.exists(argv.output_dir):
             return argv.output_dir
+
         if not os.path.exists('data'):
             os.mkdir('data')
-        return 'data/'
+
+        output_dir = 'data/%s/' % argv.model
+        if not os.path.exists(output_dir):
+            os.mkdir(output_dir)
+
+        return output_dir
 
     def save_model(self):
         self._save_params(self.output_fn, self.output_dir)
@@ -233,6 +251,50 @@ class NBestModelAPI(ModelAPI):
         if not os.path.exists('data/nbest'):
             os.mkdir('data/nbest')
         return 'data/nbest/'
+
+
+class StackingModelAPI(ModelAPI):
+
+    def __init__(self, argv):
+        super(StackingModelAPI, self).__init__(argv)
+
+    def set_model(self):
+        self.model = StackingModel(argv=self.argv,
+                                   emb=self.emb,
+                                   n_labels=self.vocab_label.size())
+        self.compile_model()
+
+    def compile_model(self):
+        # x_w: 1D: batch, 2D: n_prds, 3D: n_words, 4D: dim_h
+        # x_p: 1D: batch, 2D: n_prds, 3D: n_words; 4D: n_labels
+        # y: 1D: batch, 2D: n_prds, 3D: n_words; elem=label id
+        self.model.compile(x_w=T.ftensor4('x_w'),
+                           x_p=T.ftensor4('x_p'),
+                           y=T.itensor3('y'))
+
+    def predict_all(self, samples):
+        results = Results(self.argv)
+        start = time.time()
+
+        for index, sample in enumerate(samples):
+            if index != 0 and index % 1000 == 0:
+                print index,
+                sys.stdout.flush()
+
+            if sample.n_prds == 0:
+                results.samples.append(sample)
+                results.outputs_prob.append([])
+                results.decoder_outputs.append([])
+                continue
+
+            model_outputs = self.predict([sample.x_w], [sample.x_p], [sample.y])
+            decoder_outputs = self.decode(prob_lists=model_outputs[0], prd_indices=sample.prd_indices)
+            results.samples.append(sample)
+            results.outputs_prob.append(model_outputs[0])
+            results.decoder_outputs.append(decoder_outputs)
+
+        print '\tTime: %f' % (time.time() - start)
+        return results
 
 
 class RerankingModelAPI(ModelAPI):

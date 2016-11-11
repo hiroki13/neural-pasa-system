@@ -63,12 +63,17 @@ class Driver(object):
 
     @staticmethod
     def _select_model_api(argv):
-        if argv.model == 'nbest' or argv.model == 'jack':
+        if argv.model == 'nbest':
             return NBestModelAPI
+        elif argv.model == 'stack':
+            return StackingModelAPI
         elif argv.model == 'rerank':
             return RerankingModelAPI
         elif argv.model == 'grid':
             return GridModelAPI
+        elif argv.model == 'jack':
+            if argv.output == 'n_best':
+                return NBestModelAPI
         return ModelAPI
 
     @staticmethod

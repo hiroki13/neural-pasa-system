@@ -167,3 +167,14 @@ def load_dir(dn):
         path = os.path.join(dn, fn)
         corpus.extend(load_data(path))
     return corpus
+
+
+def load_results_dir(dn):
+    assert os.path.exists(dn)
+    corpus = []
+    file_names = os.listdir(dn)
+    say('\nLoading the files: %s\n' % str(file_names))
+    for fn in file_names:
+        path = os.path.join(dn, fn)
+        corpus.append(load_data(path))
+    return corpus

@@ -18,7 +18,8 @@ class EpochManager(object):
             say('\nEpoch: %d\n' % (epoch + 1))
             print '  TRAIN\n\t',
 
-            train_samples = self.shuffle_batches(train_samples, 3)
+            if argv.model == 'base' or argv.model == 'nbest':
+                train_samples = self.shuffle_batches(train_samples, 3)
             self._train_one_epoch(model_api, train_samples)
             dev_results, update, trainable_emb = self._validate(epoch, model_api, dev_samples, untrainable_emb)
             test_results = self._test(epoch, model_api, test_samples, update)
@@ -39,7 +40,6 @@ class EpochManager(object):
         model_api.train_each(samples)
 
     def _validate(self, epoch, model_api, samples, untrainable_emb=None):
-        argv = self.argv
         results = None
 
         if untrainable_emb:
@@ -49,7 +49,7 @@ class EpochManager(object):
             trainable_emb = None
 
         update = False
-        if argv.dev_data:
+        if samples:
             print '\n  DEV\n\t',
             # results: (sample, result, decoded_result)
             results = model_api.predict_all(samples)
@@ -62,10 +62,9 @@ class EpochManager(object):
         return results, update, trainable_emb
 
     def _test(self, epoch, model_api, samples, update):
-        argv = self.argv
         results = None
 
-        if argv.test_data:
+        if samples:
             print '\n  TEST\n\t',
             results = model_api.predict_all(samples)
             f1 = model_api.eval_all(batch_y_hat=results.decoder_outputs, samples=samples)

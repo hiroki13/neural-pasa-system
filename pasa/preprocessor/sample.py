@@ -141,10 +141,20 @@ class StackingSample(Sample):
 
     def __init__(self, sent, window):
         super(StackingSample, self).__init__(sent, window)
+        self.sample = sent[0]
+        self.outputs_prob = sent[1]
+        self.outputs_hidden = sent[2]
+        self.n_words = self.sample.n_words
 
     def set_params(self, vocab_word, vocab_label):
         self.set_label_ids(vocab_label)
-        self.set_x_y(word_phi, posit_phi)
+        self.set_x_y(self.outputs_hidden, self.outputs_prob)
+
+    def set_label_ids(self, vocab_label):
+        sample = self.sample
+        self.label_ids = sample.label_ids
+        self.prd_indices = sample.prd_indices
+        self.n_prds = sample.n_prds
 
     def set_x_y(self, word_phi, posit_phi):
         assert len(word_phi) == len(posit_phi) == len(self.label_ids)
@@ -152,6 +162,10 @@ class StackingSample(Sample):
         self.x_p = self._numpize(posit_phi)
         self.y = self._numpize(self.label_ids)
         self.inputs = [self.x_w, self.x_p, self.y]
+
+    @staticmethod
+    def _numpize(sample):
+        return np.asarray(sample, dtype='float32')
 
 
 class RankingSample(Sample):

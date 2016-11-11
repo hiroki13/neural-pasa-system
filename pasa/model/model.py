@@ -70,7 +70,7 @@ class Model(object):
         self.y_gold = y
         self.y_pred = self.output_layer.decode(o)
         self.y_prob = o.dimshuffle(1, 0, 2)
-        self.hidden_reps = h
+        self.hidden_reps = h.dimshuffle(1, 0, 2)
 
         ############
         # Training #
@@ -149,6 +149,72 @@ class Model(object):
         elif opt == 'adam':
             return adam(cost=cost, params=params)
         return sgd(cost=cost, params=params, lr=lr)
+
+
+class StackingModel(Model):
+
+    def __init__(self, argv, emb, n_labels):
+        super(StackingModel, self).__init__(argv, emb, None, n_labels)
+
+    def compile(self, x_w, x_p, y):
+        argv = self.argv
+
+        self.inputs = [x_w, x_p, y]
+
+        self.dropout = theano.shared(np.float32(argv.dropout).astype(theano.config.floatX))
+        self.set_layers(self.emb)
+        self.set_params()
+
+        x = self.emb_layer_forward(x_w, x_p)
+        h = self.hidden_layer_forward(x)
+        o = self.output_layer_forward(h)
+
+        self.y_pred = self.output_layer.decode(o)
+        self.y_gold = y.reshape(self.y_pred.shape)
+        self.y_prob = o.dimshuffle(1, 0, 2)
+
+        self.nll, self.cost = self.objective_f(o=o, reg=argv.reg)
+        self.update = self.optimize(cost=self.cost, opt=argv.opt, lr=argv.lr)
+
+    def set_layers(self, init_emb):
+        argv = self.argv
+        dim_h = argv.dim_hidden
+        dim_out = self.n_labels
+        dim_in = dim_h + dim_out
+
+        self.emb_layer = ConnectedLayer(n_i=dim_in, n_h=dim_h)
+        self.hidden_layers = GridNetwork(unit=argv.unit, depth=argv.layers, n_in=dim_h, n_h=dim_h)
+        self.output_layer = Layer(n_i=dim_h, n_labels=dim_out)
+
+        self.layers.append(self.emb_layer)
+        self.layers.extend(self.hidden_layers.layers)
+        self.layers.append(self.output_layer)
+        say('No. of rnn layers: %d\n' % (len(self.layers)-3))
+
+    def emb_layer_forward(self, x_w, x_p):
+        """
+        :param x_w: 1D: batch, 2D: n_prds, 3D: n_words, 4D: dim_h; pretrained hidden rep
+        :param x_p: 1D: batch, 2D: n_prds, 3D: n_words, 4D: n_labels; log prob
+        :return: 1D: batch, 2D: n_prds, 3D: n_words, 4D: dim_h
+        """
+        x = T.concatenate([x_w, x_p], axis=3)
+        return self.emb_layer.dot(x)
+
+    def hidden_layer_forward(self, x):
+        """
+        :param x: 1D: batch, 2D: n_prds, 3D: n_words, 4D: dim_h
+        :return: 1D: batch, 2D: n_prds, 3D: n_words, 4D: dim_h
+        """
+        return self.hidden_layers.forward(x)
+
+    def output_layer_forward(self, x):
+        """
+        :param x: 1D: batch, 2D: n_prds, 3D: n_words, 4D: dim_h
+        :return: 1D: n_words, 2D: batch * n_prds, 3D: n_labels; log probability of a label
+        """
+        x = x.reshape((x.shape[0] * x.shape[1], x.shape[2], x.shape[3]))
+        x = x.dimshuffle(1, 0, 2)
+        return self.layers[-1].forward(x)
 
 
 class RerankingModel(Model):
