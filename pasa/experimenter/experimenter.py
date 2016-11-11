@@ -138,8 +138,8 @@ class Trainer(Experimenter):
 
 class JackKnifeTrainer(Trainer):
 
-    def __init__(self, argv, preprocessor, model_api, config):
-        super(JackKnifeTrainer, self).__init__(argv, preprocessor, model_api, config)
+    def __init__(self, argv, preprocessor, model_api, epoch_manager):
+        super(JackKnifeTrainer, self).__init__(argv, preprocessor, model_api, epoch_manager)
 
     def _load_corpus_set(self):
         self.preprocessor.set_corpus_loader()
@@ -158,7 +158,7 @@ class JackKnifeTrainer(Trainer):
         return train_part, train_set[sec]
 
     def save_word(self):
-        output_fn = 'vocab_word.model-%d.cut-%d' % (self.argv.model, self.argv.vocab_cut_off)
+        output_fn = 'vocab_word.model-%s.cut-%d' % (self.argv.model, self.argv.vocab_cut_off)
         if self.argv.sec is None:
             output_fn += '.all'
         else:
@@ -167,6 +167,15 @@ class JackKnifeTrainer(Trainer):
         self._create_path(output_path)
         dump_data(self.vocab_word, output_fn)
         move_data(output_fn + '.pkl.gz', output_path)
+
+
+class StackingTrainer(Trainer):
+
+    def __init__(self, argv, preprocessor, model_api, epoch_manager):
+        super(StackingTrainer, self).__init__(argv, preprocessor, model_api, epoch_manager)
+
+    def _setup_word(self):
+        pass
 
 
 class RerankingTrainer(Trainer):
@@ -182,6 +191,39 @@ class RerankingTrainer(Trainer):
 
     def _show_corpus_stats(self, corpus_set):
         pass
+
+
+class TrainCorpusSeparator(Trainer):
+
+    def __init__(self, argv, preprocessor, model_api, epoch_manager):
+        super(TrainCorpusSeparator, self).__init__(argv, preprocessor, model_api, epoch_manager)
+
+    def setup_experiment(self):
+        self._setup_corpus()
+        train_set = self._separate_train_data(10)
+        self._save_train_samples(train_set)
+
+    def train(self):
+        pass
+
+    def _separate_train_data(self, n_seps):
+        train_corpus = self.corpus_set[0]
+        n_samples = len(train_corpus)
+        slide = n_samples / n_seps
+        separated_train_set = []
+        for i in xrange(n_seps - 1):
+            one_train = train_corpus[i * slide: (i + 1) * slide]
+            separated_train_set.append(one_train)
+        one_train = train_corpus[(n_seps - 1) * slide:]
+        separated_train_set.append(one_train)
+        return separated_train_set
+
+    def _save_train_samples(self, train_set):
+        output_fn = 'train.%d.pkl.gz' % len(train_set)
+        output_path = self.output_path + '/train'
+        self._create_path(output_path)
+        dump_data(train_set, output_fn)
+        move_data(output_fn, output_path)
 
 
 class Tester(Experimenter):
@@ -222,10 +264,6 @@ class Tester(Experimenter):
             test_results, test_results_prob = model_api.predict_all(self.test_samples)
             test_f1 = model_api.eval_all(test_results, self.test_samples)
             say('\n\n\tBEST TEST F:{:.2%}\n'.format(test_f1))
-
-    def output_pretrained_reps(self):
-        say('\n\nOutput pretrained hidden representations\n')
-        self.model_api.output_hidden_rep(self.test_samples)
 
 
 class JackKnifeTester(Tester):
@@ -280,37 +318,3 @@ class NBestTester(JackKnifeTester):
         dev_corpus = self.preprocessor.corpus_loader.load_corpus(self.argv.dev_data)
         test_corpus = self.preprocessor.corpus_loader.load_corpus(self.argv.test_data)
         return None, dev_corpus, test_corpus
-
-
-class TrainCorpusSeparator(Trainer):
-
-    def __init__(self, argv, preprocessor, model_api, config):
-        super(TrainCorpusSeparator, self).__init__(argv, preprocessor, model_api, config)
-
-    def setup_experiment(self):
-        self._setup_corpus()
-        train_set = self._separate_train_data(10)
-        self._save_train_samples(train_set)
-
-    def train(self):
-        pass
-
-    def _separate_train_data(self, n_seps):
-        train_corpus = self.corpus_set[0]
-        n_samples = len(train_corpus)
-        slide = n_samples / n_seps
-        separated_train_set = []
-        for i in xrange(n_seps - 1):
-            one_train = train_corpus[i * slide: (i + 1) * slide]
-            separated_train_set.append(one_train)
-        one_train = train_corpus[(n_seps - 1) * slide:]
-        separated_train_set.append(one_train)
-        return separated_train_set
-
-    def _save_train_samples(self, train_set):
-        output_fn = 'train.%d.pkl.gz' % len(train_set)
-        output_path = self.output_path + 'train'
-        self._create_path(output_path)
-        dump_data(train_set, output_fn)
-        move_data(output_fn, output_path)
-

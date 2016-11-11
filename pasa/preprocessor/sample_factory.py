@@ -1,7 +1,7 @@
 import numpy as np
 
 from abc import ABCMeta, abstractmethod
-from sample import Sample, RankingSample, RerankingSample, GridSample
+from sample import Sample, StackingSample, RerankingSample, GridSample
 
 
 class SampleFactory(object):
@@ -102,56 +102,57 @@ class BasicSampleFactory(SampleFactory):
         return batch
 
 
-class RankingSampleFactory(SampleFactory):
+class StackingSampleFactory(BasicSampleFactory):
 
     def create_sample(self, sent):
-        return RankingSample(sent=sent, window=self.window)
+        return StackingSample(sent=sent, window=self.window)
 
-    def create_shared_batch_samples(self, samples):
+    def create_batched_samples(self, samples, n_inputs):
         """
         :param samples: 1D: n_sents; Sample
         """
         batches = []
-        x_w = []
-        x_p = []
-        y = []
+        batch = [[] for i in xrange(n_inputs)]
 
         samples = [sample for sample in samples if sample.n_prds > 0]
-        prev_n_words = samples[0].n_words
+        samples = self.separate_samples(samples)
+        samples = self._sort_by_n_words(samples)
+        prev_n_words = len(samples[0][0])
 
         for sample in samples:
-            if self.is_batch_boundary(sample.n_words,
-                                      prev_n_words,
-                                      y,
-                                      self.batch_size):
+            n_words = len(sample[0])
+            boundary_elems = (n_words, prev_n_words, len(batch[-1]))
 
-                batches.append(self.create_batch(x_w, x_p, y, prev_n_words))
-                prev_n_words = sample.n_words
-                x_w = []
-                x_p = []
-                y = []
+            if self._is_batch_boundary(boundary_elems, self.batch_size):
+                prev_n_words = n_words
+                batches.append(batch)
+                batch = [[] for i in xrange(n_inputs)]
+            batch = self._add_inputs_to_batch(batch, sample)
 
-            x_w.extend(sample.x_w)  # 1D: n_prds * n_words, 2D: 5 + window
-            x_p.extend(sample.x_p)  # 1D: n_prds * n_words
-            y.extend(sample.y)  # 1D: n_prds, 2D: n_labels (3)
-
-        if x_w:
-            batches.append(self.create_batch(x_w, x_p, y, prev_n_words))
+        if len(batch[0]) > 0:
+            batches.append(batch)
 
         return batches
 
-    def create_batch(self, x_w, x_p, y, n_words):
-        return self._numpize(x_w), self._numpize(x_p), self._numpize(y), self._numpize(n_words)
+    @staticmethod
+    def _sort_by_n_words(samples):
+        np.random.shuffle(samples)
+        samples.sort(key=lambda s: len(s[0]))
+        return samples
 
     @staticmethod
-    def _numpize(sample):
-        return np.asarray(sample, dtype='int32')
-
-    @staticmethod
-    def is_batch_boundary(n_words, prev_n_words, y, batch_size):
-        if prev_n_words != n_words or len(y) >= batch_size:
+    def _is_batch_boundary(boundary_elems, batch_size):
+        n_words, prev_n_words, n_batches = boundary_elems
+        if prev_n_words != n_words or n_batches >= batch_size:
             return True
         return False
+
+    @staticmethod
+    def _add_inputs_to_batch(batch, sample):
+        batch[0].append(sample[0])
+        batch[1].append(sample[1])
+        batch[2].append(sample[2])
+        return batch
 
 
 class RerankingSampleFactory(SampleFactory):

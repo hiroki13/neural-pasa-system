@@ -1,5 +1,3 @@
-import sys
-import time
 from copy import copy
 
 import numpy as np
@@ -9,22 +7,22 @@ from ..ling.graph import Graph, Node, PriorityQueue
 
 class Decoder(object):
 
-    def __init__(self):
-        pass
+    def __init__(self, argv):
+        self.argv = argv
 
-    def decode_argmax(self, prob_lists, prd_indices):
+    def decode(self, output_prob, prd_indices):
         """
-        :param prob_lists: 1D: n_prds, 2D: n_words, 3D: n_labels; label probability
+        :param output_prob: 1D: n_prds, 2D: n_words, 3D: n_labels; label probability
         :param prd_indices: 1D: n_prds; prd word index in a sentence
         :return: 1D: n_prds, 2D: n_words; label index
         """
         best_lists = []
-        for prob_list, prd_index in zip(prob_lists, prd_indices):
-            best_lists.append(self.decode_argmax_each(prob_list, prd_index))
+        for prob_list, prd_index in zip(output_prob, prd_indices):
+            best_lists.append(self._decode_argmax(prob_list, prd_index))
         return best_lists
 
     @staticmethod
-    def decode_argmax_each(prob_list, prd_index):
+    def _decode_argmax(prob_list, prd_index):
         best_list = []
         for word_index, probs in enumerate(prob_list):
             if word_index == prd_index:
@@ -34,19 +32,21 @@ class Decoder(object):
             best_list.append(best_label_index)
         return best_list
 
-    def decode_n_best(self, all_prob_lists, all_prd_indices, N):
-        start = time.time()
-        n_best_lists = []
-        print '\t',
-        for index, (prob_lists, prd_indices) in enumerate(zip(all_prob_lists, all_prd_indices)):
-            if index != 0 and index % 1000 == 0:
-                print index,
-                sys.stdout.flush()
-            n_best_lists.append(self.decode_n_best_each(prob_lists, N))
-        print '\tTime: %f' % (time.time() - start)
-        return n_best_lists
 
-    def decode_n_best_each(self, prob_lists, N):
+class NBestDecoder(Decoder):
+
+    def __init__(self, argv):
+        super(NBestDecoder, self).__init__(argv)
+
+    def decode(self, output_prob, prd_indices):
+        """
+        :param output_prob: 1D: n_prds, 2D: n_words, 3D: n_labels; label probability
+        :param prd_indices: 1D: n_prds; prd word index in a sentence
+        :return: 1D: n_prds, 2D: n_words; label index
+        """
+        return self._decode_n_best(output_prob, self.argv.n_best)
+
+    def _decode_n_best(self, prob_lists, N):
         """
         :param prob_lists: 1D: n_prds, 2D: n_words, 3D: n_labels
         :return: sorted_list: 1D: n_words * n_labels; (prd_index, word index, label index, prob)

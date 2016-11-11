@@ -6,7 +6,7 @@ from ..utils.io_utils import say
 from ..nn.rnn import RNNLayers, GridNetwork, ConnectedLayer
 from ..nn.nn_utils import L2_sqr, hinge_loss
 from ..nn.optimizers import ada_grad, ada_delta, adam, sgd
-from ..nn.seq_labeling import Layer, MEMMLayer, CRFLayer, RankingLayer
+from ..nn.seq_labeling import Layer, MEMMLayer, CRFLayer
 from ..nn.embedding import EmbeddingLayer, RerankingEmbeddingLayer
 
 
@@ -149,73 +149,6 @@ class Model(object):
         elif opt == 'adam':
             return adam(cost=cost, params=params)
         return sgd(cost=cost, params=params, lr=lr)
-
-
-class RankingModel(Model):
-
-    def __init__(self, argv, emb, n_vocab, n_labels):
-        super(RankingModel, self).__init__(argv, emb, n_vocab, n_labels)
-
-    def compile(self, x_w, x_p, y, n_words):
-        self.inputs = [x_w, x_p, y, n_words]
-
-        argv = self.argv
-        batch_size = x_w.shape[0] / n_words
-
-        self.dropout = theano.shared(np.float32(argv.dropout).astype(theano.config.floatX))
-        self.set_layers(x_w, n_words, self.emb)
-        self.set_params()
-
-        ############
-        # Networks #
-        ############
-        x = self.emb_layer_forward(x_w, x_p, batch_size, n_words)
-        h = self.hidden_layer_forward(x)
-        h = self.output_layer_forward(h)
-
-        # 1D: 1, 2D: batch, 3D: dim_h
-        NULL = T.zeros(shape=(1, h.shape[1], h.shape[2]))
-        h = T.concatenate([h, NULL], 0)
-
-        ###########
-        # Outputs #
-        ###########
-        self.y_gold = y
-        self.y_pred = self.output_layer.decode(h)
-
-        ############
-        # Training #
-        ############
-        self.nll, self.cost = self.objective_f(o=h, reg=argv.reg)
-        self.update = self.optimize(cost=self.cost, opt=argv.opt, lr=argv.lr)
-
-    def set_layers(self, x_w, n_words, init_emb):
-        argv = self.argv
-        dim_emb = argv.dim_emb if init_emb is None else len(init_emb[0])
-        dim_posit = argv.dim_posit
-        dim_in = dim_emb * (5 + argv.window) + dim_posit
-        dim_h = argv.dim_hidden
-        dim_out = self.n_labels
-        n_vocab = self.n_vocab
-        unit = argv.unit
-        fix = argv.fix
-        n_layers = argv.layers
-
-        self.emb_layer = EmbeddingLayer(n_vocab=n_vocab, dim_emb=dim_emb, init_emb=init_emb, dim_posit=dim_posit, fix=fix)
-        self.hidden_layers = RNNLayers(unit=unit, depth=n_layers, n_in=dim_in, n_h=dim_h)
-        self.output_layer = RankingLayer(n_i=dim_h, n_labels=dim_out)
-
-        self.layers.append(self.emb_layer)
-        self.layers.extend(self.hidden_layers.layers)
-        self.layers.append(self.output_layer)
-        say('No. of rnn layers: %d\n' % (len(self.layers)-3))
-
-    def objective_f(self, o, reg):
-        pos_scores = self.output_layer.get_y_scores(o, self.y_gold)
-        neg_scores = self.output_layer.get_y_hat_scores(o)
-        nll = hinge_loss(pos_scores, neg_scores)
-        cost = nll + reg * L2_sqr(self.params) / 2.
-        return nll, cost
 
 
 class RerankingModel(Model):

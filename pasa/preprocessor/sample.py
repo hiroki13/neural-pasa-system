@@ -137,6 +137,23 @@ class Sample(object):
         return np.asarray(sample, dtype='int32')
 
 
+class StackingSample(Sample):
+
+    def __init__(self, sent, window):
+        super(StackingSample, self).__init__(sent, window)
+
+    def set_params(self, vocab_word, vocab_label):
+        self.set_label_ids(vocab_label)
+        self.set_x_y(word_phi, posit_phi)
+
+    def set_x_y(self, word_phi, posit_phi):
+        assert len(word_phi) == len(posit_phi) == len(self.label_ids)
+        self.x_w = self._numpize(word_phi)
+        self.x_p = self._numpize(posit_phi)
+        self.y = self._numpize(self.label_ids)
+        self.inputs = [self.x_w, self.x_p, self.y]
+
+
 class RankingSample(Sample):
 
     def __init__(self, sent, window):

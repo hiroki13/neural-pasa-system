@@ -20,8 +20,12 @@ class EpochManager(object):
 
             train_samples = self.shuffle_batches(train_samples, 3)
             self._train_one_epoch(model_api, train_samples)
-            update, trainable_emb = self._validate(epoch, model_api, dev_samples, untrainable_emb)
-            self._test(epoch, model_api, test_samples, update)
+            dev_results, update, trainable_emb = self._validate(epoch, model_api, dev_samples, untrainable_emb)
+            test_results = self._test(epoch, model_api, test_samples, update)
+
+            if argv.save and update:
+                model_api.save_model()
+                model_api.save_outputs(results=test_results)
 
             if trainable_emb:
                 model_api.model.emb_layer.word_emb.set_value(trainable_emb)
@@ -36,6 +40,7 @@ class EpochManager(object):
 
     def _validate(self, epoch, model_api, samples, untrainable_emb=None):
         argv = self.argv
+        results = None
 
         if untrainable_emb:
             trainable_emb = model_api.model.emb_layer.word_emb.get_value(True)
@@ -46,27 +51,31 @@ class EpochManager(object):
         update = False
         if argv.dev_data:
             print '\n  DEV\n\t',
-            results_list, results_prob = model_api.predict_all(samples)
-            f1 = model_api.eval_all(results_list, samples)
+            # results: (sample, result, decoded_result)
+            results = model_api.predict_all(samples)
+            f1 = model_api.eval_all(batch_y_hat=results.decoder_outputs, samples=samples)
             if self.best_f1 < f1:
                 self.best_f1 = f1
                 self.f1_history[epoch+1] = [f1]
                 update = True
 
-        return update, trainable_emb
+        return results, update, trainable_emb
 
     def _test(self, epoch, model_api, samples, update):
         argv = self.argv
+        results = None
 
         if argv.test_data:
             print '\n  TEST\n\t',
-            results_list, results_prob = model_api.predict_all(samples)
-            f1 = model_api.eval_all(results_list, samples)
+            results = model_api.predict_all(samples)
+            f1 = model_api.eval_all(batch_y_hat=results.decoder_outputs, samples=samples)
             if update:
                 if epoch + 1 in self.f1_history:
                     self.f1_history[epoch+1].append(f1)
                 else:
                     self.f1_history[epoch+1] = [f1]
+
+        return results
 
     def _show_results(self):
         say('\n\n\tF1 HISTORY')

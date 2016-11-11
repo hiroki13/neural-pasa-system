@@ -37,6 +37,8 @@ class Driver(object):
             return JackKnifeTrainer
         elif argv.model == 'sep':
             return TrainCorpusSeparator
+        elif argv.model == 'stack':
+            return StackingTrainer
         elif argv.model == 'rerank':
             return RerankingTrainer
         return Trainer
@@ -51,10 +53,10 @@ class Driver(object):
 
     @staticmethod
     def _select_preprocessor(argv):
-        if argv.model == 'rank':
-            return RankingPreprocessor
-        elif argv.model == 'rerank':
+        if argv.model == 'rerank':
             return RerankingPreprocessor
+        elif argv.model == 'stack':
+            return StackingPreprocessor
         elif argv.model == 'grid':
             return GridPreprocessor
         return Preprocessor
@@ -63,8 +65,6 @@ class Driver(object):
     def _select_model_api(argv):
         if argv.model == 'nbest' or argv.model == 'jack':
             return NBestModelAPI
-        elif argv.model == 'rank':
-            return RankingModelAPI
         elif argv.model == 'rerank':
             return RerankingModelAPI
         elif argv.model == 'grid':

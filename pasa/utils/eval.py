@@ -193,3 +193,12 @@ class Eval(object):
 
     def show_accuracy(self):
         say('\n\tACCURACY: {:.2%} ({:d}/{:d})'.format(self.correct / self.total, int(self.correct), int(self.total)))
+
+    def eval_n_best_list(self, n_best_lists, samples):
+        for n_best_list, sample in zip(n_best_lists, samples):
+            if len(n_best_list) == 0:
+                continue
+            best_f1_list = self.select_best_f1_list(n_best_list=n_best_list, batch_y=sample.label_ids)
+            self.update_results(batch_y_hat=best_f1_list, batch_y=sample.label_ids)
+        self.show_results()
+        say('\n\n')

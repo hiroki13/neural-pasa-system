@@ -33,7 +33,7 @@ if __name__ == '__main__':
     ###########
     parser.add_argument('--output_fn', type=str, default=None, help='Output file name')
     parser.add_argument('--output_dir', type=str, default=None, help='Output directory name')
-    parser.add_argument('--pretrain', type=int, default=0, help='Output pretrained rep')
+    parser.add_argument('--output', type=str, default=None, help='n_best/pretrain')
 
     #########
     # Model #
@@ -62,19 +62,17 @@ if __name__ == '__main__':
     parser.add_argument('--dim_posit',  type=int, default=5, help='dimension of position embeddings')
     parser.add_argument('--dim_hidden', type=int, default=32, help='dimension of hidden layer')
     parser.add_argument('--dropout', type=float, default=0.0, help='dropout prob')
-    parser.add_argument('--attention', type=int, default=0, help='attention')
-    parser.add_argument('--pooling', default='max', help='pooling')
 
     #######################
     # Training Parameters #
     #######################
-    parser.add_argument('--batch_size', type=int, default=32, help='mini batch size')
+    parser.add_argument('--batch_size', type=int, default=8, help='mini batch size')
     parser.add_argument('--opt', default='adam', help='optimization method')
     parser.add_argument('--epoch', type=int, default=50, help='number of epochs to train')
     parser.add_argument('--lr', type=float, default=0.0075, help='learning rate')
     parser.add_argument('--reg', type=float, default=0.0001, help='learning rate')
     parser.add_argument('--init_emb', default=None, help='Initial embedding to be loaded')
-    parser.add_argument('--n_best', type=int, default=5, help='How many best lists are created')
+    parser.add_argument('--n_best', type=int, default=10, help='How many best lists are created')
 
     argv = parser.parse_args()
     print

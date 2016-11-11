@@ -1,9 +1,9 @@
 import numpy as np
 import theano
 
-from sample_factory import BasicSampleFactory, RankingSampleFactory, RerankingSampleFactory, GridSampleFactory
+from sample_factory import BasicSampleFactory, StackingSampleFactory, RerankingSampleFactory, GridSampleFactory
 from ..ling.vocab import Vocab, UNK, PAD
-from ..utils.io_utils import CorpusLoader, say, load_init_emb
+from ..utils.io_utils import CorpusLoader, say, load_init_emb, load_data
 from ..utils.stats import corpus_statistics, sample_statistics
 
 
@@ -147,20 +147,31 @@ class Preprocessor(object):
         return vocab_word
 
 
-class RankingPreprocessor(Preprocessor):
+class StackingPreprocessor(Preprocessor):
 
     def __init__(self, argv):
-        super(RankingPreprocessor, self).__init__(argv)
+        super(StackingPreprocessor, self).__init__(argv)
 
     def set_sample_factory(self, vocab_word, vocab_label):
-        self.sample_factory = RankingSampleFactory(vocab_word=vocab_word,
-                                                   vocab_label=vocab_label,
-                                                   batch_size=self.argv.batch_size,
-                                                   window_size=self.argv.window)
+        self.sample_factory = StackingSampleFactory(vocab_word=vocab_word,
+                                                    vocab_label=vocab_label,
+                                                    batch_size=self.argv.batch_size,
+                                                    window_size=self.argv.window)
 
-    @staticmethod
-    def show_sample_stats(sample_set, vocab_label):
-        pass
+    def load_corpus_set(self):
+        # corpus: 1D: n_sents, 2D: n_words, 3D: Word()
+        train_corpus = load_data(self.argv.train_data)
+        dev_corpus = load_data(self.argv.dev_data)
+        test_corpus = load_data(self.argv.test_data)
+        return train_corpus, dev_corpus, test_corpus
+
+    def create_sample_set(self, corpus_set):
+        # samples: 1D: n_sents; Sample
+        train_corpus, dev_corpus, test_corpus = corpus_set
+        train_samples = self.create_samples(train_corpus)
+        dev_samples = self.create_samples(dev_corpus)
+        test_samples = self.create_samples(test_corpus)
+        return train_samples, dev_samples, test_samples
 
 
 class RerankingPreprocessor(Preprocessor):
