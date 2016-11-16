@@ -85,10 +85,10 @@ class RNNLayers(object):
         return x + h
 
 
-class GridNetwork(RNNLayers):
+class GridCrossNetwork(RNNLayers):
 
     def __init__(self, unit, depth, n_in, n_h):
-        super(GridNetwork, self).__init__(unit, depth, n_in, n_h)
+        super(GridCrossNetwork, self).__init__(unit, depth, n_in, n_h)
 
     def set_forward_func(self, unit):
         return self.grid_propagate
@@ -162,6 +162,77 @@ class GridNetwork(RNNLayers):
         return layer.dot(h)
 
 
+class GridObliqueNetwork(RNNLayers):
+
+    def __init__(self, unit, depth, n_in, n_h):
+        super(GridObliqueNetwork, self).__init__(unit, depth, n_in, n_h)
+
+    def set_forward_func(self, unit):
+        return self.grid_propagate
+
+    @staticmethod
+    def set_layers(unit, depth, n_in, n_h):
+        layers = []
+        for i in xrange(depth):
+            layers.append(ObliqueForwardNet(n_h=n_h))
+        return layers
+
+    def grid_propagate(self, h):
+        """
+        :param h: 1D: batch, 2D: n_prds, 3D: n_words, 4D: dim_h
+        :return: 1D: batch, 2D: n_prds, 3D: n_words, 4D: dim_h
+        """
+        h0 = T.zeros((h.shape[0], h.shape[3]), dtype=theano.config.floatX)
+        hp0 = T.zeros((h.shape[2], h.shape[0], h.shape[3]), dtype=theano.config.floatX)
+        h = h.dimshuffle(1, 2, 0, 3)
+        for i in xrange(0, self.depth):
+            h_tmp = self.layers[i].forward_all(h, hp0, h0)
+            h = h + h_tmp
+            h = self.flip(h)
+        return h.dimshuffle(2, 0, 1, 3)
+
+    @staticmethod
+    def flip(x):
+        x = x[::-1]
+        x = x.dimshuffle(1, 0, 2, 3)
+        x = x[::-1]
+        return x.dimshuffle(1, 0, 2, 3)
+
+
+class ObliqueForwardNet(object):
+
+    def __init__(self, n_h):
+        self.unit = GridGRU(n_in=n_h*2, n_h=n_h)
+        self.params = self.unit.params
+
+    def forward_all(self, h, h_prev, h0):
+        """
+        :param h: 1D: n_prds, 2D: n_words, 3D: batch, dim_h
+        :param h_prev: 1D: n_words, 2D: batch, 3D: dim_h
+        :param h0: 1D: batch, 2D: dim_h
+        :return: 1D: n_prds, 2D: n_words, 3D: batch, 3D: dim_h
+        """
+        h, _ = theano.scan(fn=self.forward_row, sequences=[h], outputs_info=[h_prev], non_sequences=[h0])
+        return h
+
+    def forward_row(self, x, h_prev, h0):
+        """
+        :param x: 1D: n_words, 2D: batch, 3D: dim_h
+        :param h_prev: 1D: n_words, 2D: batch, 3D: dim_h
+        :param h0: 1D: batch, 2D: dim_h
+        :return: 1D: n_words, 2D: batch, 3D: dim_h
+        """
+        return self.forward_column(T.concatenate([x, h_prev], axis=2), h0)
+
+    def forward_column(self, x, h):
+        """
+        :param x: 1D: n_words, 2D: batch, 3D: dim_h
+        :param h: 1D: n_words, 2D: batch, 3D: dim_h
+        :return: 1D: n_words, 2D: batch, 3D: dim_h
+        """
+        return self.unit.forward_all(x, h)
+
+
 class GRU(object):
 
     def __init__(self, n_h=32, activation=tanh):
@@ -174,6 +245,37 @@ class GRU(object):
         self.W_hz = theano.shared(sample_weights(n_h, n_h))
 
         self.W_xh = theano.shared(sample_weights(n_h, n_h))
+        self.W_hh = theano.shared(sample_weights(n_h, n_h))
+
+        self.params = [self.W_xr, self.W_hr, self.W_xz, self.W_hz, self.W_xh, self.W_hh]
+
+    def forward(self, xr_t, xz_t, xh_t, h_tm1):
+        r_t = sigmoid(xr_t + T.dot(h_tm1, self.W_hr))
+        z_t = sigmoid(xz_t + T.dot(h_tm1, self.W_hz))
+        h_hat_t = self.activation(xh_t + T.dot((r_t * h_tm1), self.W_hh))
+        h_t = (1. - z_t) * h_tm1 + z_t * h_hat_t
+        return h_t
+
+    def forward_all(self, x, h0):
+        xr = T.dot(x, self.W_xr)
+        xz = T.dot(x, self.W_xz)
+        xh = T.dot(x, self.W_xh)
+        h, _ = theano.scan(fn=self.forward, sequences=[xr, xz, xh], outputs_info=[h0])
+        return h
+
+
+class GridGRU(object):
+
+    def __init__(self, n_in=32, n_h=32, activation=tanh):
+        self.activation = activation
+
+        self.W_xr = theano.shared(sample_weights(n_in, n_h))
+        self.W_hr = theano.shared(sample_weights(n_h, n_h))
+
+        self.W_xz = theano.shared(sample_weights(n_in, n_h))
+        self.W_hz = theano.shared(sample_weights(n_h, n_h))
+
+        self.W_xh = theano.shared(sample_weights(n_in, n_h))
         self.W_hh = theano.shared(sample_weights(n_h, n_h))
 
         self.params = [self.W_xr, self.W_hr, self.W_xz, self.W_hz, self.W_xh, self.W_hh]

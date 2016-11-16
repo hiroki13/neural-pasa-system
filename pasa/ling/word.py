@@ -88,12 +88,12 @@ class Word(object):
             for case_label, a_id in enumerate(self.case_arg_ids):
                 if w.id == a_id > -1:
                     if w.chunk_index == self.chunk_index:
-                        case_type = 0
+                        case_type = 0  # Within bunsetsu
                     elif w.chunk_index == self.chunk_head or w.chunk_head == self.chunk_index:
-                        case_type = 1
+                        case_type = 1  # Dep
                         self.case_arg_index[case_label] = w.index
                     else:
-                        case_type = 2
+                        case_type = 2  # Zero
                         self.case_arg_index[case_label] = w.index
                     self.case_types[case_label] = case_type
 
@@ -115,28 +115,3 @@ class Word(object):
             if arg_index > -1:
                 return True
         return False
-
-
-class Wordsrl(object):
-    label_dict = Vocab()
-    label_dict.add_word('_')
-    label_dict.add_word('V')
-
-    def __init__(self, elem, file_encoding='utf-8'):
-        self.index = int(elem[0]) - 1
-        self.form = elem[1].lower().decode(file_encoding)
-        self.is_prd = self.set_is_prd(elem[12])
-        self.labels = self.set_labels(elem[14:])
-
-    @staticmethod
-    def set_is_prd(prd):
-        if prd is 'Y':
-            return True
-        return False
-
-    def set_labels(self, labels):
-        y = []
-        for label in labels:
-            self.label_dict.add_word(label)
-            y.append(self.label_dict.get_id(label))
-        return y

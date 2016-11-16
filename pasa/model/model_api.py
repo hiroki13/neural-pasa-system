@@ -10,10 +10,11 @@ import theano
 import theano.tensor as T
 
 from model import Model, StackingModel, RerankingModel, GridModel
+from decoder import Decoder, NBestDecoder
+from io_manager import IOManager
 from result import Results
 from ..utils.io_utils import say, move_data
-from ..utils.eval import Eval
-from ..decoder.decoder import Decoder, NBestDecoder
+from ..utils.eval import Eval, TrainEval
 
 
 class ModelAPI(object):
@@ -28,6 +29,8 @@ class ModelAPI(object):
 
         self.model = None
         self.decoder = None
+        self.io_manager = None
+
         self.train = None
         self.predict = None
 
@@ -38,6 +41,7 @@ class ModelAPI(object):
         self.vocab_label = vocab_label
         self.set_model()
         self.set_decoder()
+        self.set_io_manager()
         self.set_output_path()
 
     def set_output_path(self):
@@ -61,6 +65,9 @@ class ModelAPI(object):
 
     def set_decoder(self):
         self.decoder = Decoder(self.argv)
+
+    def set_io_manager(self):
+        self.io_manager = IOManager(self.argv, self.vocab_word, self.vocab_label)
 
     def set_train_f(self):
         model = self.model
@@ -87,7 +94,7 @@ class ModelAPI(object):
     def train_each(self, samples):
         tr_indices = range(len(samples))
         np.random.shuffle(tr_indices)
-        train_eval = Eval()
+        train_eval = TrainEval()
         start = time.time()
 
         for index, b_index in enumerate(tr_indices):
@@ -118,12 +125,19 @@ class ModelAPI(object):
                 if self.argv.output == 'pretrain':
                     results.add((sample, [[], []], []))
                 else:
-                    results.add((sample, [], []))
+                    results.samples.append(sample)
+                    results.outputs_prob.append([])
+                    results.decoder_outputs.append([])
                 continue
 
             model_outputs = self.predict(sample.x_w, sample.x_p, sample.y)
             decoder_outputs = self.decode(prob_lists=model_outputs[0], prd_indices=sample.prd_indices)
-            results.add((sample, model_outputs, decoder_outputs))
+            if self.argv.output == 'pretrain':
+                results.add([sample, model_outputs, decoder_outputs])
+            else:
+                results.samples.append(sample)
+                results.outputs_prob.append(model_outputs[0])
+                results.decoder_outputs.append(decoder_outputs)
 
         print '\tTime: %f' % (time.time() - start)
         return results
@@ -139,14 +153,14 @@ class ModelAPI(object):
         for result, sample in zip(batch_y_hat, samples):
             if len(result) == 0:
                 continue
-            pred_eval.update_results(batch_y_hat=result, batch_y=sample.label_ids)
+            pred_eval.update_results(y_hat_batch=result, sample=sample)
         pred_eval.show_results()
         return pred_eval.all_f1
 
     def _set_output_fn(self):
         argv = self.argv
         if argv.output_fn is None:
-            output_fn = 'model-%s.layers-%d' % (argv.model, argv.layers)
+            output_fn = 'model-%s.layers-%d.batch-%d.reg-%f' % (argv.model, argv.layers, argv.batch_size, argv.reg)
         else:
             return argv.output_fn
 
@@ -218,6 +232,9 @@ class ModelAPI(object):
                 for p1, p2 in zip(l.params, p):
                     p1.set_value(p2.get_value(borrow=True))
 
+    def save_pas_results(self, fn, results, samples):
+        self.io_manager.output_results(fn, results, samples)
+
 
 class NBestModelAPI(ModelAPI):
 
@@ -229,7 +246,7 @@ class NBestModelAPI(ModelAPI):
 
     @staticmethod
     def eval_all(batch_y_hat, samples):
-        pred_eval = Eval()
+        pred_eval = TrainEval()
         pred_eval.eval_n_best_list(n_best_lists=batch_y_hat, samples=samples)
         return pred_eval.all_f1
 
@@ -469,14 +486,15 @@ class RerankingModelAPI(ModelAPI):
 
 class GridModelAPI(ModelAPI):
 
-    def __init__(self, argv, emb, vocab_word, vocab_label):
-        super(GridModelAPI, self).__init__(argv, emb, vocab_word, vocab_label)
+    def __init__(self, argv):
+        super(GridModelAPI, self).__init__(argv)
 
     def set_model(self):
         self.model = GridModel(argv=self.argv,
                                emb=self.emb,
                                n_vocab=self.vocab_word.size(),
                                n_labels=self.vocab_label.size())
+        self.compile_model()
 
     def compile_model(self):
         # x_w: 1D: batch, 2D: n_prds, 3D: n_words, 4D: 5 + window; elem=word id
@@ -486,102 +504,8 @@ class GridModelAPI(ModelAPI):
                            x_p=T.itensor3('x_p'),
                            y=T.itensor3('y'))
 
-    def set_train_f(self, samples):
-        model = self.model
-        self.train = theano.function(inputs=model.inputs,
-                                     outputs=[model.y_pred, model.y_gold, model.nll],
-                                     updates=model.update,
-                                     )
-
-    def set_predict_f(self):
-        model = self.model
-        self.predict = theano.function(inputs=model.inputs,
-                                       outputs=model.y_prob,
-                                       on_unused_input='ignore'
-                                       )
-
-    def train_all(self, argv, train_samples, dev_samples, test_samples, untrainable_emb=None):
-        say('\n\nTRAINING START\n\n')
-
-        f1_history = {}
-        best_dev_f1 = -1.
-        for epoch in xrange(argv.epoch):
-            say('\nEpoch: %d\n' % (epoch + 1))
-            print '  TRAIN\n\t',
-
-            self.train_each(train_samples)
-
-            ###############
-            # Development #
-            ###############
-            if untrainable_emb is not None:
-                trainable_emb = self.model.emb_layer.word_emb.get_value(True)
-                self.model.emb_layer.word_emb.set_value(np.r_[trainable_emb, untrainable_emb])
-
-            update = False
-            if dev_samples:
-                print '\n  DEV\n\t',
-                dev_results, dev_results_prob = self.predict_all(dev_samples)
-                dev_f1 = self.eval_all(dev_results, dev_samples)
-                if best_dev_f1 < dev_f1:
-                    best_dev_f1 = dev_f1
-                    f1_history[epoch+1] = [best_dev_f1]
-                    update = True
-
-                    if argv.save_model:
-                        self.save_model()
-
-            ########
-            # Test #
-            ########
-            if test_samples:
-                print '\n  TEST\n\t',
-                test_results, test_results_prob = self.predict_all(test_samples)
-                test_f1 = self.eval_all(test_results, test_samples)
-                if update:
-                    if epoch+1 in f1_history:
-                        f1_history[epoch+1].append(test_f1)
-                    else:
-                        f1_history[epoch+1] = [test_f1]
-
-            if untrainable_emb is not None:
-                self.model.emb_layer.word_emb.set_value(trainable_emb)
-
-            ###########
-            # Results #
-            ###########
-            say('\n\n\tF1 HISTORY')
-            for k, v in sorted(f1_history.items()):
-                if len(v) == 2:
-                    say('\n\tEPOCH-{:d}  \tBEST DEV F:{:.2%}\tBEST TEST F:{:.2%}'.format(k, v[0], v[1]))
-                else:
-                    say('\n\tEPOCH-{:d}  \tBEST DEV F:{:.2%}'.format(k, v[0]))
-            say('\n\n')
-
-    def train_each(self, samples):
-        tr_indices = range(len(samples))
-        np.random.shuffle(tr_indices)
-        train_eval = Eval()
-        start = time.time()
-
-        for index, b_index in enumerate(tr_indices):
-            if index != 0 and index % 1000 == 0:
-                print index,
-                sys.stdout.flush()
-
-            x_w, x_p, y = samples[b_index]
-            result_sys, result_gold, nll = self.train(x_w, x_p, y)
-            assert not math.isnan(nll), 'NLL is NAN: Index: %d' % index
-
-            train_eval.update_results(result_sys, result_gold)
-            train_eval.nll += nll
-
-        print '\tTime: %f' % (time.time() - start)
-        train_eval.show_results()
-
     def predict_all(self, samples):
-        all_best_lists = []
-        all_prob_lists = []
+        results = Results(self.argv)
         start = time.time()
 
         for index, sample in enumerate(samples):
@@ -590,15 +514,17 @@ class GridModelAPI(ModelAPI):
                 sys.stdout.flush()
 
             if sample.n_prds == 0:
-                all_best_lists.append([])
-                all_prob_lists.append([])
+                results.samples.append(sample)
+                results.outputs_prob.append([])
+                results.decoder_outputs.append([])
                 continue
 
-            prob_lists = self.predict([sample.x_w], [sample.x_p], [sample.y])
-            best_list = self.decode(prob_lists=prob_lists, prd_indices=sample.prd_indices)
-            all_best_lists.append(best_list)
-            all_prob_lists.append(prob_lists)
+            model_outputs = self.predict([sample.x_w], [sample.x_p], [sample.y])
+            decoder_outputs = self.decode(prob_lists=model_outputs[0], prd_indices=sample.prd_indices)
+            results.samples.append(sample)
+            results.outputs_prob.append(model_outputs[0])
+            results.decoder_outputs.append(decoder_outputs)
 
         print '\tTime: %f' % (time.time() - start)
-        return all_best_lists, all_prob_lists
+        return results
 

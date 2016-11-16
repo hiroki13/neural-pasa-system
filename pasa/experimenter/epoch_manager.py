@@ -29,7 +29,11 @@ class EpochManager(object):
 
             if argv.save and update:
                 model_api.save_model()
-                model_api.save_outputs(results=test_results)
+                """
+                if test_results:
+                    model_api.save_pas_results(fn='test', results=test_results.decoder_outputs, samples=test_samples)
+                    model_api.save_outputs(results=test_results)
+                """
 
             if trainable_emb:
                 model_api.model.emb_layer.word_emb.set_value(trainable_emb)

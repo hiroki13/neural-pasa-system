@@ -3,7 +3,7 @@ import theano
 import theano.tensor as T
 
 from ..utils.io_utils import say
-from ..nn.rnn import RNNLayers, GridNetwork, ConnectedLayer
+from ..nn.rnn import RNNLayers, GridObliqueNetwork, ConnectedLayer
 from ..nn.nn_utils import L2_sqr, hinge_loss
 from ..nn.optimizers import ada_grad, ada_delta, adam, sgd
 from ..nn.seq_labeling import Layer, MEMMLayer, CRFLayer
@@ -183,7 +183,7 @@ class StackingModel(Model):
         dim_in = dim_h + dim_out
 
         self.emb_layer = ConnectedLayer(n_i=dim_in, n_h=dim_h)
-        self.hidden_layers = GridNetwork(unit=argv.unit, depth=argv.layers, n_in=dim_h, n_h=dim_h)
+        self.hidden_layers = GridObliqueNetwork(unit=argv.unit, depth=argv.layers, n_in=dim_h, n_h=dim_h)
         self.output_layer = Layer(n_i=dim_h, n_labels=dim_out)
 
         self.layers.append(self.emb_layer)
@@ -276,7 +276,7 @@ class RerankingModel(Model):
                                                  n_labels=5, dim_label=dim_label,
                                                  fix=fix)
         self.hidden_connected_layer = ConnectedLayer(n_i=dim_in, n_h=dim_h)
-        self.hidden_layers = GridNetwork(unit=unit, depth=n_layers, n_in=dim_h, n_h=dim_h)
+        self.hidden_layers = GridObliqueNetwork(unit=unit, depth=n_layers, n_in=dim_h, n_h=dim_h)
         self.output_layer = ConnectedLayer(n_i=dim_h, n_h=1)
 
         self.layers.append(self.emb_layer)
@@ -345,6 +345,7 @@ class GridModel(Model):
         argv = self.argv
         self.inputs = [x_w, x_p, y]
 
+        self.dropout = theano.shared(np.float32(argv.dropout).astype(theano.config.floatX))
         self.set_layers(self.emb)
         self.set_params()
 
@@ -370,7 +371,7 @@ class GridModel(Model):
         self.emb_layer = EmbeddingLayer(init_emb=init_emb, n_vocab=self.n_vocab, dim_emb=dim_emb,
                                         n_posit=2, dim_posit=dim_posit, fix=argv.fix)
         self.emb_connected_layer = ConnectedLayer(n_i=dim_in, n_h=dim_h)
-        self.hidden_layers = GridNetwork(unit=argv.unit, depth=argv.layers, n_in=dim_h, n_h=dim_h)
+        self.hidden_layers = GridObliqueNetwork(unit=argv.unit, depth=argv.layers, n_in=dim_h, n_h=dim_h)
         self.output_layer = Layer(n_i=dim_h, n_labels=dim_out)
 
         self.layers.append(self.emb_layer)

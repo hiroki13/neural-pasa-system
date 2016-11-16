@@ -2,6 +2,9 @@ import numpy as np
 
 
 def show_case_dist(corpus):
+    if corpus is None:
+        return
+
     print '\nCASE DISTRIBUTION\n'
 
     """
@@ -43,7 +46,7 @@ def show_case_dist(corpus):
             label = 'O'
         else:
             label = 'Ni'
-        print '\t%s\tBST: %d  DEP: %d  INTRA-ZERO: %d  INTER-ZEO: %d  EXOPHORA: %d' %\
+        print '\t%s\tBST: %d  DEP: %d  INTRA-ZERO: %d  INTER-ZERO: %d  EXOPHORA: %d' %\
               (label, cases[0], cases[1], cases[2], cases[3], cases[4])
     print '\n\tPredicates: %d' % n_prds
 

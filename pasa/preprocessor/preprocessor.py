@@ -4,7 +4,7 @@ import theano
 from sample_factory import BasicSampleFactory, StackingSampleFactory, RerankingSampleFactory, GridSampleFactory
 from ..ling.vocab import Vocab, UNK, PAD
 from ..utils.io_utils import CorpusLoader, say, load_init_emb, load_data, load_results_dir
-from ..utils.stats import corpus_statistics, sample_statistics
+from ..utils.stats import corpus_statistics, sample_statistics, show_case_dist
 
 
 class Preprocessor(object):
@@ -81,6 +81,7 @@ class Preprocessor(object):
     def show_corpus_stats(corpora):
         for corpus in corpora:
             corpus_statistics(corpus)
+            show_case_dist(corpus)
 
     @staticmethod
     def show_sample_stats(sample_set, vocab_label):

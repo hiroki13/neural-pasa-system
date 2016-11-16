@@ -6,7 +6,7 @@ class Sample(object):
 
     def __init__(self, sent, window):
         """
-        sent: 1D: n_words; Word
+        sent: 1D: n_words; Word()
         word_ids: 1D: n_words; word id
         prd_indices: 1D: n_prds; word id
         x_w: 1D: n_prds, 2D: n_words, 3D: window; word id
