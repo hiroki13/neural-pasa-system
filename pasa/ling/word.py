@@ -1,7 +1,11 @@
 import re
-from vocab import Vocab
 
 n_cases = 3
+
+"""
+    An example of the pas_info:
+    [u'alt="active"', u'ga="2"', u'ga_type="dep"', u'ni="1"', u'ni_type="dep"', u'type="pred"']
+"""
 
 
 class Word(object):
@@ -10,16 +14,15 @@ class Word(object):
         self.index = index
         self.form = elem[0].decode(file_encoding)
         self.chars = [c for c in self.form]
+        self.cpos = elem[3].decode(file_encoding)
+        self.pos = elem[4].decode(file_encoding)
+
         self.pas_info = elem[-1].decode(file_encoding).split('/')
+        self.alt = self._set_alt(self.pas_info)
 
-        """
-        An example of the pas_info:
-        [u'alt="active"', u'ga="2"', u'ga_type="dep"', u'ni="1"', u'ni_type="dep"', u'type="pred"']
-        """
-
-        self.id = self.set_id()
-        self.is_prd = self.set_is_prd()
-        self.case_arg_ids = self.set_case_arg_ids()  # cases: [Ga, O, Ni]; elem=arg id
+        self.id = self._set_id()
+        self.is_prd = self._set_is_prd()
+        self.case_arg_ids = self._set_case_arg_ids()  # cases: [Ga, O, Ni]; elem=arg id
         self.case_types = [-1, -1, -1]
         self.case_arg_index = [-1, -1, -1]
         self.inter_case_arg_index = [[], [], []]
@@ -28,19 +31,26 @@ class Word(object):
         self.chunk_index = -1
         self.chunk_head = -1
 
-    def set_id(self):
+    def _set_id(self):
         for p in self.pas_info:
             if 'id=' == p[:3]:
                 m = re.search("\d+", p)
                 return int(m.group())
         return -1
 
-    def set_is_prd(self):
+    def _set_is_prd(self):
         if 'type="pred"' in self.pas_info:
             return True
         return False
 
-    def set_case_arg_ids(self):
+    @staticmethod
+    def _set_alt(pas_info):
+        for p in pas_info:
+            if 'alt=' == p[:4]:
+                return p[5:-1]
+        return '_'
+
+    def _set_case_arg_ids(self):
         case_arg_ids = [-1 for i in xrange(n_cases)]  # -1 is no-corresponding arg
 
         if self.is_prd is False:

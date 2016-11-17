@@ -29,11 +29,9 @@ class EpochManager(object):
 
             if argv.save and update:
                 model_api.save_model()
-                """
                 if test_results:
-                    model_api.save_pas_results(fn='test', results=test_results.decoder_outputs, samples=test_samples)
+                    model_api.save_pas_results(results=test_results.decoder_outputs, samples=test_samples)
                     model_api.save_outputs(results=test_results)
-                """
 
             if trainable_emb:
                 model_api.model.emb_layer.word_emb.set_value(trainable_emb)
@@ -44,7 +42,7 @@ class EpochManager(object):
         argv = self.argv
         dropout_p = np.float32(argv.dropout).astype(theano.config.floatX)
         model_api.model.dropout.set_value(dropout_p)
-        model_api.train_each(samples)
+        model_api.train_one_epoch(samples)
 
     def _validate(self, epoch, model_api, samples, untrainable_emb=None):
         results = None
@@ -59,8 +57,8 @@ class EpochManager(object):
         if samples:
             print '\n  DEV\n\t',
             # results: (sample, result, decoded_result)
-            results = model_api.predict_all(samples)
-            f1 = model_api.eval_all(batch_y_hat=results.decoder_outputs, samples=samples)
+            results = model_api.predict_one_epoch(samples)
+            f1 = model_api.eval_one_epoch(batch_y_hat=results.decoder_outputs, samples=samples)
             if self.best_f1 < f1:
                 self.best_f1 = f1
                 self.f1_history[epoch+1] = [f1]
@@ -73,8 +71,8 @@ class EpochManager(object):
 
         if samples:
             print '\n  TEST\n\t',
-            results = model_api.predict_all(samples)
-            f1 = model_api.eval_all(batch_y_hat=results.decoder_outputs, samples=samples)
+            results = model_api.predict_one_epoch(samples)
+            f1 = model_api.eval_one_epoch(batch_y_hat=results.decoder_outputs, samples=samples)
             if update:
                 if epoch + 1 in self.f1_history:
                     self.f1_history[epoch+1].append(f1)

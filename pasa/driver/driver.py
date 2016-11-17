@@ -1,4 +1,5 @@
-from ..experimenter.experimenter import *
+from ..experimenter.trainer import *
+from ..experimenter.tester import *
 from ..experimenter.epoch_manager import *
 from ..preprocessor.preprocessor import *
 from ..model.model_api import *
@@ -39,8 +40,6 @@ class Driver(object):
             return TrainCorpusSeparator
         elif argv.model == 'stack':
             return StackingTrainer
-        elif argv.model == 'rerank':
-            return RerankingTrainer
         return Trainer
 
     @staticmethod
@@ -53,9 +52,7 @@ class Driver(object):
 
     @staticmethod
     def _select_preprocessor(argv):
-        if argv.model == 'rerank':
-            return RerankingPreprocessor
-        elif argv.model == 'stack':
+        if argv.model == 'stack':
             return StackingPreprocessor
         elif argv.model == 'grid':
             return GridPreprocessor
@@ -67,8 +64,6 @@ class Driver(object):
             return NBestModelAPI
         elif argv.model == 'stack':
             return StackingModelAPI
-        elif argv.model == 'rerank':
-            return RerankingModelAPI
         elif argv.model == 'grid':
             return GridModelAPI
         elif argv.model == 'jack':

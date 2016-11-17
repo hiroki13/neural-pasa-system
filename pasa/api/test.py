@@ -9,5 +9,5 @@ def main(argv):
     say('\n\nPREDICTING\n')
     tester.predict()
 
-    if argv.pretrain:
+    if argv.output == 'pretrain':
         tester.output_pretrained_reps()

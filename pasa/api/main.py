@@ -25,7 +25,7 @@ if __name__ == '__main__':
     parser.add_argument('--test_data', default=None, help='path to test data')
     parser.add_argument('--load_word', type=str, default=None, help='word')
     parser.add_argument('--load_label', type=str, default=None, help='label')
-    parser.add_argument('--load_params', type=str, default=None, help='load trained parameters')
+    parser.add_argument('--load_param', type=str, default=None, help='load trained parameters')
     parser.add_argument('--load_config', type=str, default=None, help='load configuration')
 
     ###########

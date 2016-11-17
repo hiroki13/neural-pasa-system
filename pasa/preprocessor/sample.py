@@ -168,61 +168,6 @@ class StackingSample(Sample):
         return np.asarray(sample, dtype='float32')
 
 
-class RankingSample(Sample):
-
-    def __init__(self, sent, window):
-        super(RankingSample, self).__init__(sent, window)
-
-    def create_label_seq(self, prd, vocab_label):
-        label_seq = []
-        null_arg_index = self.n_words
-        for index in prd.case_arg_index:
-            if index < 0:
-                case_arg_index = null_arg_index
-            else:
-                case_arg_index = index
-            label_seq.append(case_arg_index)
-        label_seq.append(prd.index)
-        return label_seq
-
-    def set_x_y(self, word_phi, posit_phi):
-        assert len(word_phi) == len(posit_phi) == len(self.label_ids)
-        self.x_w = self._numpize(self._flatten(word_phi))
-        self.x_p = self._numpize(self._flatten(posit_phi))
-        self.y = self._numpize(self.label_ids)
-
-
-class RerankingSample(Sample):
-
-    def __init__(self, n_best_list, window):
-        super(RerankingSample, self).__init__(n_best_list.words, window)
-        self.n_best_list = n_best_list
-        self.x_l = []
-
-    def set_params(self, vocab_word, vocab_label):
-        self.set_word_ids(vocab_word)
-        self.set_label_ids(vocab_label)
-        word_phi = self.get_word_phi()
-        posit_phi = self.get_posit_phi()
-        self.set_x_y(word_phi, posit_phi)
-
-    def set_label_ids(self, vocab_label):
-        self.label_ids = self.n_best_list.label_ids
-        self.prd_indices = self.n_best_list.prd_indices
-        self.n_prds = len(self.prd_indices)
-
-    @staticmethod
-    def _get_max_f1_list_index(n_best_list):
-        return n_best_list.get_max_f1_list_index()
-
-    def set_x_y(self, word_phi, posit_phi):
-        assert len(word_phi) == len(posit_phi)
-        self.x_w = self._numpize(word_phi)
-        self.x_p = self._numpize(posit_phi)
-        self.x_l = self._numpize(self.n_best_list.lists)
-        self.y = self._numpize(self._get_max_f1_list_index(self.n_best_list))
-
-
 class GridSample(Sample):
 
     def __init__(self, sent, window):

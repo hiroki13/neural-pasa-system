@@ -1,7 +1,7 @@
 import numpy as np
 import theano
 
-from sample_factory import BasicSampleFactory, StackingSampleFactory, RerankingSampleFactory, GridSampleFactory
+from sample_factory import BasicSampleFactory, StackingSampleFactory, GridSampleFactory
 from ..ling.vocab import Vocab, UNK, PAD
 from ..utils.io_utils import CorpusLoader, say, load_init_emb, load_data, load_results_dir
 from ..utils.stats import corpus_statistics, sample_statistics, show_case_dist
@@ -153,6 +153,19 @@ class StackingPreprocessor(Preprocessor):
     def __init__(self, argv):
         super(StackingPreprocessor, self).__init__(argv)
 
+    def create_vocab_word(self, corpus):
+        vocab_word = Vocab()
+        vocab_word.set_init_word()
+        corpus = self.create_corpus(corpus)
+        vocab_word.add_vocab_from_corpus(corpus=corpus, vocab_cut_off=self.argv.vocab_cut_off)
+        vocab_word.add_word(UNK)
+        say('\nVocab: %d\tType: word\n' % vocab_word.size())
+        return vocab_word
+
+    @staticmethod
+    def create_corpus(results):
+        return [[sample.sent for sample in results.samples]]
+
     @staticmethod
     def show_corpus_stats(corpora):
         pass
@@ -167,10 +180,11 @@ class StackingPreprocessor(Preprocessor):
         # samples: 1D: n_sents; Sample
         train_corpus, dev_corpus, test_corpus = corpus_set
         train_corpus = self.concatenate_results(train_corpus)
+        vocab_word = self.create_vocab_word(train_corpus)
         train_samples = self.create_samples(train_corpus)
         dev_samples = self.create_samples(dev_corpus)
         test_samples = self.create_samples(test_corpus)
-        return train_samples, dev_samples, test_samples
+        return (train_samples, dev_samples, test_samples), vocab_word
 
     def load_corpus_set(self):
         # corpus: 1D: n_sents, 2D: n_words, 3D: Word()
@@ -190,33 +204,13 @@ class StackingPreprocessor(Preprocessor):
         return res
 
 
-class RerankingPreprocessor(Preprocessor):
-
-    def __init__(self, argv):
-        super(RerankingPreprocessor, self).__init__(argv)
-
-    def create_vocab_word(self, corpus):
-        vocab_word = Vocab()
-        vocab_word.set_init_word()
-        vocab_word.add_vocab_from_lists(corpus=corpus, vocab_cut_off=self.argv.vocab_cut_off)
-        vocab_word.add_word(UNK)
-        say('\nVocab: %d\tType: word\n' % vocab_word.size())
-        return vocab_word
-
-    def set_sample_factory(self, vocab_word, vocab_label):
-        self.sample_factory = RerankingSampleFactory(vocab_word=vocab_word,
-                                                     vocab_label=vocab_label,
-                                                     batch_size=self.argv.batch_size,
-                                                     window_size=self.argv.window)
-
-
 class GridPreprocessor(Preprocessor):
 
-    def __init__(self, argv):
-        super(GridPreprocessor, self).__init__(argv)
+    def __init__(self, argv, config=None):
+        super(GridPreprocessor, self).__init__(argv, config)
 
     def set_sample_factory(self, vocab_word, vocab_label):
         self.sample_factory = GridSampleFactory(vocab_word=vocab_word,
                                                 vocab_label=vocab_label,
                                                 batch_size=self.argv.batch_size,
-                                                window_size=self.argv.window)
+                                                window_size=self.window)
