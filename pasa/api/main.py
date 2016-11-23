@@ -39,7 +39,6 @@ if __name__ == '__main__':
     # Model #
     #########
     parser.add_argument('--model', type=str, default='base', help='base/rank/rerank/sep/jack')
-    parser.add_argument('--check', type=bool, default=False, help='check')
     parser.add_argument('--save', type=int, default=1, help='save model')
     parser.add_argument('--result', type=bool, default=False, help='output results')
 

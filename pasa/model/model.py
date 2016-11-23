@@ -87,8 +87,8 @@ class Model(object):
         dim_h = argv.dim_hidden
         dim_out = self.n_labels
 
-        self.emb_layer = EmbeddingLayer(n_vocab=self.n_vocab, dim_emb=dim_emb, init_emb=init_emb,
-                                        dim_posit=dim_posit, fix=argv.fix)
+        self.emb_layer = EmbeddingLayer(init_emb=init_emb, n_vocab=self.n_vocab, dim_emb=dim_emb,
+                                        n_posit=2, dim_posit=dim_posit, fix=argv.fix)
         self.hidden_layers = RNNLayers(unit=argv.unit, depth=argv.layers, n_in=dim_in, n_h=dim_h)
 
         if self.argv.output_layer == 0:
@@ -104,7 +104,7 @@ class Model(object):
         say('No. of rnn layers: %d\n' % (len(self.layers)-3))
 
     def set_params(self):
-        for l in self.layers[1:]:
+        for l in self.layers:
             self.params.extend(l.params)
         say("No. of parameters: {}\n".format(sum(len(x.get_value(borrow=True).ravel()) for x in self.params)))
 

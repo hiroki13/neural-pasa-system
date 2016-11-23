@@ -1,5 +1,4 @@
 import sys
-import os
 import time
 import math
 
@@ -12,7 +11,7 @@ from decoder import Decoder, NBestDecoder
 from io_manager import IOManager
 from result import Results
 from ..utils.io_utils import say
-from ..utils.eval import Eval, TrainEval
+from ..experimenter.evaluator import Eval, TrainEval
 
 
 class ModelAPI(object):

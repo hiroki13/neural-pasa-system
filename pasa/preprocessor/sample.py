@@ -1,4 +1,6 @@
 import numpy as np
+
+from ..utils.io_utils import say
 from ..ling.vocab import UNK, NA, GA, O, NI, PRD, GA_LABEL, O_LABEL, NI_LABEL
 
 
@@ -72,8 +74,11 @@ class Sample(object):
                     label_seq[arg_index] = vocab_label.get_id(GA)
                 elif case_label == O_LABEL:
                     label_seq[arg_index] = vocab_label.get_id(O)
-                else:
+                elif case_label == NI_LABEL:
                     label_seq[arg_index] = vocab_label.get_id(NI)
+                else:
+                    say('\nSomething wrong with case labels\n')
+                    exit()
         return label_seq
 
     def get_word_phi(self):
