@@ -48,6 +48,12 @@ class IOManager(object):
                 os.mkdir(path)
             path += '/'
 
+    @staticmethod
+    def _check_identifier(fn):
+        if not fn.endswith(".pkl.gz"):
+            fn += ".gz" if fn.endswith(".pkl") else ".pkl.gz"
+        return fn
+
     def save_model(self, model):
         self._save_params(model, self.output_fn, self.output_dir)
         self._save_config(self.output_fn, self.output_dir)
@@ -94,49 +100,43 @@ class IOManager(object):
 
     def save_pas_results(self, results, samples):
         fn = 'pas.' + self.output_fn + '.txt'
-        self.output_analyzed_pas(fn, results, samples)
+        self._output_analyzed_pas(fn, results, samples)
         output_dir = self.output_dir + 'pas'
         move_data(fn, output_dir)
 
-    @staticmethod
-    def _check_identifier(fn):
-        if not fn.endswith(".pkl.gz"):
-            fn += ".gz" if fn.endswith(".pkl") else ".pkl.gz"
-        return fn
-
-    def output_analyzed_pas(self, fn, results, samples):
+    def _output_analyzed_pas(self, fn, results, samples):
         assert len(results) == len(samples)
         with open(fn, 'w') as fout:
             for result, sample in zip(results, samples):
-                text = self.generate_sent_info(sample.sent)
+                text = self._generate_sent_info(sample.sent)
                 fout.writelines(text.encode('utf-8'))
-                text = self.generate_analyzed_pas_info(result, sample.label_ids, sample.prd_indices, sample.sent)
+                text = self._generate_analyzed_pas_info(result, sample.label_ids, sample.prd_indices, sample.sent)
                 fout.writelines(text.encode('utf-8'))
 
-    def generate_analyzed_pas_info(self, result_sys, result_gold, prd_indices, sent):
+    def _generate_analyzed_pas_info(self, result_sys, result_gold, prd_indices, sent):
         text = ''
         for r_s, r_g, prd_index in zip(result_sys, result_gold, prd_indices):
             prd = sent[prd_index]
             text += '#\tPRD\t%d:%s\n' % (prd_index, prd.form)
             text += '*\tGold\t'
-            text += self.generate_analyzed_pas_info_each(sent, r_g)
+            text += self._generate_analyzed_pas_info_each(sent, r_g)
             text += '\n*\tPred\t'
-            text += self.generate_analyzed_pas_info_each(sent, r_s)
+            text += self._generate_analyzed_pas_info_each(sent, r_s)
             text += '\n'
         text += '\n'
         return text
 
-    def generate_analyzed_pas_info_each(self, sent, labels):
+    def _generate_analyzed_pas_info_each(self, sent, labels):
         text = ''
         for word, label in zip(sent, labels):
             if 0 < label < 4:
                 text += '%s:%d:%s ' % (self.vocab_label.get_word(label), word.index, word.form)
         return text
 
-    def generate_sent_info(self, sent):
+    def _generate_sent_info(self, sent):
         text = ''
         for word in sent:
-            for info in self.generate_word_info(word):
+            for info in self._generate_word_info(word):
                 if type(info) == int:
                     text += '%d\t' % info
                 else:
@@ -145,6 +145,6 @@ class IOManager(object):
         return text
 
     @staticmethod
-    def generate_word_info(word):
+    def _generate_word_info(word):
         return word.index, word.form, word.cpos, word.pos, word.alt, word.chunk_index, word.chunk_head
 

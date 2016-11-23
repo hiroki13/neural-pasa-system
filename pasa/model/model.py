@@ -4,10 +4,10 @@ import theano.tensor as T
 
 from ..utils.io_utils import say
 from ..nn.rnn import RNNLayers, GridObliqueNetwork, ConnectedLayer
-from ..nn.nn_utils import L2_sqr, hinge_loss
+from ..nn.nn_utils import L2_sqr
 from ..nn.optimizers import ada_grad, ada_delta, adam, sgd
 from ..nn.seq_labeling import Layer, MEMMLayer, CRFLayer
-from ..nn.embedding import EmbeddingLayer, RerankingEmbeddingLayer
+from ..nn.embedding import EmbeddingLayer
 
 
 class Model(object):
@@ -159,12 +159,10 @@ class GridModel(Model):
         self.emb_connected_layer = None
 
     def compile(self, variables):
-        """
-        :param x_w: 1D: batch, 2D: n_prds, 3D: n_words, 4D: 5+window; word id
-        :param x_p: 1D: batch, 2D: n_prds, 3D: n_words; posit id
-        :param y: 1D: batch, 2D: n_prds, 3D: n_words; elem=label id
-        """
         argv = self.argv
+        # x_w: 1D: batch, 2D: n_prds, 3D: n_words, 4D: 5+window; word id
+        # x_p: 1D: batch, 2D: n_prds, 3D: n_words; posit id
+        # y: 1D: batch, 2D: n_prds, 3D: n_words; elem=label id
         x_w, x_p, y = variables
         self.inputs = [x_w, x_p, y]
 
@@ -267,8 +265,8 @@ class StackingModel(GridModel):
         dim_h = argv.dim_hidden
         dim_out = self.n_labels
 
-        self.emb_layer = EmbeddingLayer(n_vocab=self.n_vocab, dim_emb=dim_emb, init_emb=init_emb,
-                                        dim_posit=dim_posit, fix=argv.fix)
+        self.emb_layer = EmbeddingLayer(init_emb=init_emb, n_vocab=self.n_vocab, dim_emb=dim_emb,
+                                        n_posit=2, dim_posit=dim_posit, fix=argv.fix)
         self.emb_connected_layer = ConnectedLayer(n_i=dim_in, n_h=dim_h)
         self.hidden_layers = GridObliqueNetwork(unit=argv.unit, depth=argv.layers, n_in=dim_h, n_h=dim_h)
         self.hidden_connected_layer = ConnectedLayer(n_i=dim_h*2+dim_out, n_h=dim_h)

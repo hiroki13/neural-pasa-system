@@ -73,7 +73,9 @@ class Driver(object):
 
     @staticmethod
     def _select_epoch_manager(argv):
-        return EpochManager
+        if argv.model == 'base' or argv.model == 'nbest':
+            return EpochManager
+        return JointEpochManager
 
     @staticmethod
     def _load_config(argv):
