@@ -18,7 +18,7 @@ class EpochManager(object):
             say('\nEpoch: %d\n' % (epoch + 1))
             print '  TRAIN\n\t',
 
-            train_samples = self.shuffle_batches(train_samples, 3)
+            train_samples = self.shuffle_batches(train_samples)
 
             self._train_one_epoch(model_api, train_samples)
             dev_results, update, trainable_emb = self._validate(epoch, model_api, dev_samples, untrainable_emb)
@@ -87,8 +87,9 @@ class EpochManager(object):
                 say('\n\tEPOCH-{:d}  \tBEST DEV F:{:.2%}'.format(k, v[0]))
         say('\n\n')
 
-    def shuffle_batches(self, batches, n_inputs):
+    def shuffle_batches(self, batches):
         new_batches = []
+        n_inputs = len(batches[0])
         batch = [[] for i in xrange(n_inputs)]
 
         batches = self.separate_batches(batches)
@@ -97,9 +98,9 @@ class EpochManager(object):
 
         for sample in batches:
             n_words = len(sample[0])
-            boundary_elems = (n_words, prev_n_words, len(batch[-1]))
+            elems = (n_words, prev_n_words, len(batch[-1]))
 
-            if self._is_batch_boundary(boundary_elems, self.argv.batch_size):
+            if self._is_batch_boundary(elems, self.argv.batch_size):
                 prev_n_words = n_words
                 new_batches.append(batch)
                 batch = [[] for i in xrange(n_inputs)]
@@ -115,8 +116,8 @@ class EpochManager(object):
         return [elem for batch in batches for elem in zip(*batch)]
 
     @staticmethod
-    def _is_batch_boundary(boundary_elems, batch_size):
-        n_words, prev_n_words, n_batches = boundary_elems
+    def _is_batch_boundary(elems, batch_size):
+        n_words, prev_n_words, n_batches = elems
         if prev_n_words != n_words or n_batches >= batch_size:
             return True
         return False
@@ -140,8 +141,9 @@ class JointEpochManager(EpochManager):
     def __init__(self, argv):
         super(JointEpochManager, self).__init__(argv)
 
-    def shuffle_batches(self, batches, n_inputs):
+    def shuffle_batches(self, batches):
         new_batches = []
+        n_inputs = len(batches[0])
         batch = [[] for i in xrange(n_inputs)]
 
         samples = self.separate_batches(batches)
@@ -152,9 +154,9 @@ class JointEpochManager(EpochManager):
         for sample in samples:
             n_prds = len(sample[2])
             n_words = len(sample[2][0])
-            if self._is_batch_boundary(n_words, prev_n_words,
-                                       n_prds, prev_n_prds,
-                                       len(batch[2]), self.argv.batch_size):
+            elems = (n_words, prev_n_words, n_prds, prev_n_prds, len(batch[2]))
+
+            if self._is_batch_boundary(elems, self.argv.batch_size):
                 prev_n_prds = n_prds
                 prev_n_words = n_words
                 new_batches.append(batch)
@@ -168,7 +170,8 @@ class JointEpochManager(EpochManager):
         return new_batches
 
     @staticmethod
-    def _is_batch_boundary(n_words, prev_n_words, n_prds, prev_n_prds, n_batches, batch_size):
+    def _is_batch_boundary(elems, batch_size):
+        n_words, prev_n_words, n_prds, prev_n_prds, n_batches = elems
         if prev_n_words != n_words or n_prds != prev_n_prds or n_batches >= batch_size:
             return True
         return False

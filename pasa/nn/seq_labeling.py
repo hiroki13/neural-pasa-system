@@ -198,7 +198,6 @@ class Layer(object):
     def forward(self, x):
         """
         :param x: 1D: n_words, 2D: batch, 3D: dim_h
-        :param h: 1D: n_words, 2D: batch, 3D: dim_h
         :return: 1D: n_words, 2D: batch, 3D: n_labels; log probability of a label
         """
         # 1D: n_words, 2D: batch, 3D: n_labels
@@ -224,6 +223,50 @@ class Layer(object):
         :return: 1D: batch, 2D: n_words; the highest scoring sequence (label id)
         """
         return T.argmax(h, axis=2).dimshuffle(1, 0)
+
+
+class MixedLayer(object):
+
+    def __init__(self, n_i):
+        self.W = theano.shared(sample_weights(n_i*2, n_i))
+        self.W_a = theano.shared(sample_weights(n_i, n_i))
+        self.W_p = theano.shared(sample_weights(n_i, n_i))
+        self.params = [self.W_a, self.W_p, self.W]
+
+    def forward(self, x, m):
+        """
+        :param x: 1D: batch, 2D: n_words, 3D: dim_h
+        :param m: 1D: batch, 2D: n_prds; prd index
+        :return: 1D: n_words, 2D: batch * n_prds, 3D: dim_h
+        """
+        p = self.extract_prd_vectors(x, m)
+
+        # 1D: batch, 2D: n_prds, 3D: n_words, 4D: dim_h
+        x = T.dot(x, self.W_a)
+        x = x.dimshuffle(0, 'x', 1, 2)
+        h_x = T.repeat(x, p.shape[1], axis=1)
+
+        # 1D: batch, 2D: n_prds, 3D: n_words, 4D: dim_h
+        p = T.dot(p, self.W_p)
+        p = p.dimshuffle(0, 1, 'x', 2)
+        h_p = T.repeat(p, x.shape[2], axis=2)
+
+        # 1D: batch, 2D: n_prds, 3D: n_words, 4D: dim_h
+        h = T.dot(T.concatenate([h_x, h_p], axis=3), self.W)
+        # 1D: batch * n_prds, 2D: n_words, 3D: dim_h
+        h = h.reshape((h.shape[0] * h.shape[1], h.shape[2], h.shape[3]))
+        return h.dimshuffle(1, 0, 2)
+
+    @staticmethod
+    def extract_prd_vectors(x, p):
+        """
+        :param x: 1D: batch, 2D: n_words, 3D: dim_h
+        :param p: 1D: batch, 2D: n_prds; prd index
+        :return: 1D: batch, 2D: n_prds, 3D: dim_h
+        """
+        v = T.arange(x.shape[0])
+        v = T.repeat(v, p.shape[1], axis=0)
+        return x[v, p.flatten()].reshape((p.shape[0], p.shape[1], x.shape[2]))
 
 
 class RankingLayer(Layer):

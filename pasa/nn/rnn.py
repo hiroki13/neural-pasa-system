@@ -85,6 +85,42 @@ class RNNLayers(object):
         return x + h
 
 
+class BiRNNLayers(object):
+
+    def __init__(self, unit, depth, n_in, n_h):
+        self.unit = unit.lower()
+        self.depth = depth
+        self.n_in = n_in
+        self.n_h = n_h
+        self.forward = self.set_forward_func(self.unit)
+        self.layers = self.set_layers(self.unit, depth, n_in, n_h)
+
+    def set_forward_func(self, unit):
+        return self.gru_forward
+
+    @staticmethod
+    def set_layers(unit, depth, n_in, n_h):
+        layer = GRU
+        layers = []
+        layers.append(layer(n_h=n_in))
+        layers.append(layer(n_h=n_in))
+        layers.append(ConnectedLayer(n_i=n_in*2, n_h=n_h))
+        return layers
+
+    def gru_forward(self, x):
+        """
+        :param x: 1D: batch, 2D: n_words, 3D: dim_emb
+        :return: 1D: n_words, 2D: batch, 3D: dim_h
+        """
+        x = x.dimshuffle(1, 0, 2)
+        h0_1 = T.zeros((x.shape[1], x.shape[2]), dtype=theano.config.floatX)
+        h0_2 = T.zeros((x.shape[1], x.shape[2]), dtype=theano.config.floatX)
+        # 1D: n_words, 2D: batch, 3D n_h
+        h1 = self.layers[0].forward_all(x, h0_1)
+        h2 = self.layers[1].forward_all(x[::-1], h0_2)[::-1]
+        return self.layers[2].dot(T.concatenate([h1, h2], axis=2))
+
+
 class GridCrossNetwork(RNNLayers):
 
     def __init__(self, unit, depth, n_in, n_h):

@@ -1,17 +1,18 @@
 import numpy as np
 
 from abc import ABCMeta, abstractmethod
-from sample import Sample, StackingSample, GridSample
+from sample import Sample, StackingSample, MixedPrdSample
 
 
 class SampleFactory(object):
     __metaclass__ = ABCMeta
 
-    def __init__(self, vocab_word, vocab_label, batch_size, window_size):
+    def __init__(self, argv, vocab_word, vocab_label):
+        self.argv = argv
         self.vocab_word = vocab_word
         self.vocab_label = vocab_label
-        self.batch_size = batch_size
-        self.window = window_size
+        self.batch_size = argv.batch_size
+        self.window = argv.window
 
     @abstractmethod
     def create_sample(self, sent):
@@ -39,7 +40,7 @@ class SampleFactory(object):
         samples.sort(key=lambda s: len(s[0]))
         return samples
 
-    def create_batched_samples(self, samples, n_inputs):
+    def create_batched_samples(self, samples):
         raise NotImplementedError()
 
     @staticmethod
@@ -47,7 +48,7 @@ class SampleFactory(object):
         raise NotImplementedError()
 
     @staticmethod
-    def _is_batch_boundary(boundary_elems, batch_size):
+    def _is_batch_boundary(elems, batch_size):
         raise NotImplementedError()
 
     @staticmethod
@@ -60,7 +61,8 @@ class BasicSampleFactory(SampleFactory):
     def create_sample(self, sent):
         return Sample(sent=sent, window=self.window)
 
-    def create_batched_samples(self, samples, n_inputs):
+    def create_batched_samples(self, samples):
+        n_inputs = len(samples[0].inputs)
         batches = []
         batch = [[] for i in xrange(n_inputs)]
 
@@ -71,9 +73,9 @@ class BasicSampleFactory(SampleFactory):
 
         for sample in samples:
             n_words = len(sample[0])
-            boundary_elems = (n_words, prev_n_words, len(batch[-1]))
+            elems = (n_words, prev_n_words, len(batch[-1]))
 
-            if self._is_batch_boundary(boundary_elems, self.batch_size):
+            if self._is_batch_boundary(elems, self.batch_size):
                 prev_n_words = n_words
                 batches.append(batch)
                 batch = [[] for i in xrange(n_inputs)]
@@ -85,8 +87,8 @@ class BasicSampleFactory(SampleFactory):
         return batches
 
     @staticmethod
-    def _is_batch_boundary(boundary_elems, batch_size):
-        n_words, prev_n_words, n_batches = boundary_elems
+    def _is_batch_boundary(elems, batch_size):
+        n_words, prev_n_words, n_batches = elems
         if prev_n_words != n_words or n_batches >= batch_size:
             return True
         return False
@@ -97,6 +99,60 @@ class BasicSampleFactory(SampleFactory):
         batch[1].append(sample[1])
         batch[2].append(sample[2])
         return batch
+
+
+class SentSampleFactory(SampleFactory):
+
+    def create_sample(self, sent):
+        if self.argv.model == 'mixed':
+            return MixedPrdSample(sent=sent, window=self.window)
+        return Sample(sent=sent, window=self.window)
+
+    def create_batched_samples(self, samples):
+        n_inputs = len(samples[0].inputs)
+        batches = []
+        batch = [[] for i in xrange(n_inputs)]
+
+        samples = [sample for sample in samples if sample.n_prds > 0]
+        samples = self._sort_by_n_words(samples)
+        prev_n_prds = samples[0].n_prds
+        prev_n_words = samples[0].n_words
+
+        for sample in samples:
+            elems = (sample.n_words, prev_n_words, sample.n_prds, prev_n_prds, len(batch[-1]))
+
+            if self._is_batch_boundary(elems, self.batch_size):
+                prev_n_prds = sample.n_prds
+                prev_n_words = sample.n_words
+                batches.append(batch)
+                batch = [[] for i in xrange(n_inputs)]
+
+            batch = self._add_inputs_to_batch(batch, sample)
+
+        if len(batch[0]) > 0:
+            batches.append(batch)
+
+        return batches
+
+    @staticmethod
+    def _is_batch_boundary(elems, batch_size):
+        n_words, prev_n_words, n_prds, prev_n_prds, n_batches = elems
+        if prev_n_words != n_words or n_prds != prev_n_prds or n_batches >= batch_size:
+            return True
+        return False
+
+    @staticmethod
+    def _add_inputs_to_batch(batch, sample):
+        for i, elem in enumerate(sample.inputs):
+            batch[i].append(elem)
+        return batch
+
+    @staticmethod
+    def _sort_by_n_words(samples):
+        np.random.shuffle(samples)
+        samples.sort(key=lambda s: s.n_prds)
+        samples.sort(key=lambda s: s.n_words)
+        return samples
 
 
 class StackingSampleFactory(BasicSampleFactory):
@@ -120,10 +176,8 @@ class StackingSampleFactory(BasicSampleFactory):
 
         return samples
 
-    def create_batched_samples(self, samples, n_inputs):
-        """
-        :param samples: 1D: n_sents; Sample
-        """
+    def create_batched_samples(self, samples):
+        n_inputs = len(samples[0].inputs)
         batches = []
         batch = [[] for i in xrange(n_inputs)]
 
@@ -170,57 +224,3 @@ class StackingSampleFactory(BasicSampleFactory):
         batch[3].append(sample.x_p)
         batch[4].append(sample.y)
         return batch
-
-
-class GridSampleFactory(BasicSampleFactory):
-
-    def create_sample(self, sent):
-        return GridSample(sent=sent, window=self.window)
-
-    def create_batched_samples(self, samples, n_inputs=3):
-        """
-        :param samples: 1D: n_sents; Sample
-        """
-        batches = []
-        batch = [[] for i in xrange(n_inputs)]
-
-        samples = [sample for sample in samples if sample.n_prds > 0]
-        samples = self._sort_by_n_words(samples)
-        prev_n_prds = samples[0].n_prds
-        prev_n_words = samples[0].n_words
-
-        for sample in samples:
-            if self.is_batch_boundary(sample.n_words, prev_n_words,
-                                      sample.n_prds, prev_n_prds,
-                                      len(batch[2]), self.batch_size):
-                prev_n_prds = sample.n_prds
-                prev_n_words = sample.n_words
-                batches.append(batch)
-                batch = [[] for i in xrange(n_inputs)]
-
-            batch = self._add_inputs_to_batch(batch, sample)
-
-        if len(batch[0]) > 0:
-            batches.append(batch)
-
-        return batches
-
-    @staticmethod
-    def is_batch_boundary(n_words, prev_n_words, n_prds, prev_n_prds, n_batches, batch_size):
-        if prev_n_words != n_words or n_prds != prev_n_prds or n_batches >= batch_size:
-            return True
-        return False
-
-    @staticmethod
-    def _add_inputs_to_batch(batch, sample):
-        batch[0].append(sample.x_w)
-        batch[1].append(sample.x_p)
-        batch[2].append(sample.y)
-        return batch
-
-    @staticmethod
-    def _sort_by_n_words(samples):
-        np.random.shuffle(samples)
-        samples.sort(key=lambda s: s.n_prds)
-        samples.sort(key=lambda s: s.n_words)
-        return samples

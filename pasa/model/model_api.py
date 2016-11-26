@@ -6,7 +6,7 @@ import numpy as np
 import theano
 import theano.tensor as T
 
-from model import Model, StackingModel, GridModel
+from model import Model, StackingModel, GridModel, MixedModel
 from decoder import Decoder, NBestDecoder
 from io_manager import IOManager
 from result import Results
@@ -206,4 +206,29 @@ class GridModelAPI(ModelAPI):
     @staticmethod
     def create_input_variables(sample):
         return [sample.x_w], [sample.x_p], [sample.y]
+
+
+class MixedModelAPI(ModelAPI):
+
+    def __init__(self, argv):
+        super(MixedModelAPI, self).__init__(argv)
+
+    def set_model(self):
+        self.model = MixedModel(argv=self.argv,
+                                emb=self.emb,
+                                n_vocab=self.vocab_word.size(),
+                                n_labels=self.vocab_label.size())
+        self.compile_model()
+
+    @staticmethod
+    def _get_input_tensor_variables():
+        # x_w: 1D: batch, 2D: n_words; word id
+        # x_p: 1D: batch, 2D: n_words; arg/prd id
+        # x_m: 1D: batch, 2D: n_prds; prd index
+        # y: 1D: batch, 2D: n_prds, 3D: n_words; label id
+        return T.imatrix('x_w'), T.imatrix('x_p'), T.imatrix('x_m'), T.itensor3('y')
+
+    @staticmethod
+    def create_input_variables(sample):
+        return [sample.x_w], [sample.x_p], [sample.x_m], [sample.y]
 

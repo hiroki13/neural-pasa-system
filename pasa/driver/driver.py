@@ -54,8 +54,6 @@ class Driver(object):
     def _select_preprocessor(argv):
         if argv.model == 'stack':
             return StackingPreprocessor
-        elif argv.model == 'grid':
-            return GridPreprocessor
         return Preprocessor
 
     @staticmethod
@@ -66,6 +64,8 @@ class Driver(object):
             return StackingModelAPI
         elif argv.model == 'grid':
             return GridModelAPI
+        elif argv.model == 'mixed':
+            return MixedModelAPI
         elif argv.model == 'jack':
             if argv.output == 'n_best':
                 return NBestModelAPI

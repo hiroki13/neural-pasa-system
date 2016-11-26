@@ -1,7 +1,7 @@
 import numpy as np
 import theano
 
-from sample_factory import BasicSampleFactory, StackingSampleFactory, GridSampleFactory
+from sample_factory import BasicSampleFactory, StackingSampleFactory, SentSampleFactory
 from ..ling.vocab import Vocab, UNK, PAD
 from ..utils.io_utils import CorpusLoader, say, load_init_emb, load_data, load_results_dir
 from ..utils.stats import corpus_statistics, sample_statistics, show_case_dist
@@ -25,10 +25,15 @@ class Preprocessor(object):
         self.corpus_loader = CorpusLoader(min_unit='word', data_size=self.argv.data_size)
 
     def set_sample_factory(self, vocab_word, vocab_label):
-        self.sample_factory = BasicSampleFactory(vocab_word=vocab_word,
-                                                 vocab_label=vocab_label,
-                                                 batch_size=self.argv.batch_size,
-                                                 window_size=self.window)
+        factory = self._select_sample_factory()
+        self.sample_factory = factory(argv=self.argv,
+                                      vocab_word=vocab_word,
+                                      vocab_label=vocab_label)
+
+    def _select_sample_factory(self):
+        if self.argv.model == 'base':
+            return BasicSampleFactory
+        return SentSampleFactory
 
     def load_corpus_set(self):
         # corpus: 1D: n_sents, 2D: n_words, 3D: Word()
@@ -54,8 +59,8 @@ class Preprocessor(object):
     def create_samples(self, corpus):
         return self.sample_factory.create_samples(corpus)
 
-    def create_batched_samples(self, samples, n_inputs):
-        return self.sample_factory.create_batched_samples(samples, n_inputs)
+    def create_batched_samples(self, samples):
+        return self.sample_factory.create_batched_samples(samples)
 
     @staticmethod
     def create_vocab_label():
@@ -202,15 +207,3 @@ class StackingPreprocessor(Preprocessor):
                 res.outputs_prob.append(op)
                 res.outputs_hidden.append(oh)
         return res
-
-
-class GridPreprocessor(Preprocessor):
-
-    def __init__(self, argv, config=None):
-        super(GridPreprocessor, self).__init__(argv, config)
-
-    def set_sample_factory(self, vocab_word, vocab_label):
-        self.sample_factory = GridSampleFactory(vocab_word=vocab_word,
-                                                vocab_label=vocab_label,
-                                                batch_size=self.argv.batch_size,
-                                                window_size=self.window)
