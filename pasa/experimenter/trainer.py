@@ -33,10 +33,10 @@ class Trainer(Experimenter):
         sample_set = self.preprocessor.create_sample_set(self.corpus_set)
         self.preprocessor.show_sample_stats(sample_set, self.vocab_label)
 
-        self.train_samples = self.preprocessor.create_batched_samples(sample_set[0])
+        self.train_samples = self.preprocessor.create_batch(sample_set[0])
         self.dev_samples = sample_set[1]
         self.test_samples = sample_set[2]
-        say('\nMini-Batches: %d\n\n' % (len(self.train_samples)))
+        say('\nMini-Batches: %d\n\n' % (self.train_samples.size()))
 
     def _setup_model_api(self):
         say('\n\nSetting up a model API...\n')
@@ -97,7 +97,7 @@ class StackingTrainer(Trainer):
         sample_set, self.vocab_word = self.preprocessor.create_sample_set(self.corpus_set)
         self.preprocessor.show_sample_stats(sample_set, self.vocab_label)
 
-        self.train_samples = self.preprocessor.create_batched_samples(sample_set[0], 5)
+        self.train_samples = self.preprocessor.create_batch(sample_set[0], 5)
         self.dev_samples = sample_set[1]
         self.test_samples = sample_set[2]
         say('\nMini-Batches: %d\n\n' % (len(self.train_samples)))

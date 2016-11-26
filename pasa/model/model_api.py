@@ -2,7 +2,6 @@ import sys
 import time
 import math
 
-import numpy as np
 import theano
 import theano.tensor as T
 
@@ -71,9 +70,8 @@ class ModelAPI(object):
     def set_predict_f(self):
         model = self.model
         outputs = self._select_outputs(self.argv, model)
-        self.predict = theano.function(inputs=model.inputs,
+        self.predict = theano.function(inputs=model.x,
                                        outputs=outputs,
-                                       on_unused_input='ignore'
                                        )
 
     @staticmethod
@@ -83,18 +81,17 @@ class ModelAPI(object):
             outputs.append(model.hidden_reps)
         return outputs
 
-    def train_one_epoch(self, samples):
-        tr_indices = range(len(samples))
-        np.random.shuffle(tr_indices)
+    def train_one_epoch(self, batch):
         train_eval = TrainEval()
         start = time.time()
+        batch.shuffle_batches()
 
-        for index, b_index in enumerate(tr_indices):
+        for index, batch in enumerate(batch.batches):
             if index != 0 and index % 1000 == 0:
                 print index,
                 sys.stdout.flush()
 
-            result_sys, result_gold, nll = self.train(*samples[b_index])
+            result_sys, result_gold, nll = self.train(*batch)
             assert not math.isnan(nll), 'NLL is NAN: Index: %d' % index
 
             train_eval.update_results(result_sys, result_gold)
@@ -126,7 +123,7 @@ class ModelAPI(object):
 
     @staticmethod
     def create_input_variables(sample):
-        return sample.x_w, sample.x_p, sample.y
+        return sample.x
 
     def decode(self, prob_lists, prd_indices):
         assert len(prob_lists) == len(prd_indices)
@@ -205,7 +202,10 @@ class GridModelAPI(ModelAPI):
 
     @staticmethod
     def create_input_variables(sample):
-        return [sample.x_w], [sample.x_p], [sample.y]
+        inputs = []
+        for x in sample.x:
+            inputs.append([x])
+        return inputs
 
 
 class MixedModelAPI(ModelAPI):

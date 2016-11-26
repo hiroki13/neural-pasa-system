@@ -24,6 +24,7 @@ class Model(object):
         # Input variables #
         ###################
         self.inputs = None
+        self.x = None
 
         ####################
         # Output variables #
@@ -53,6 +54,7 @@ class Model(object):
         # Input variables #
         ###################
         self.inputs = [x_w, x_p, y]
+        self.x = [x_w, x_p]
 
         self.dropout = theano.shared(np.float32(argv.dropout).astype(theano.config.floatX))
         self.set_layers(self.emb)
@@ -165,6 +167,7 @@ class GridModel(Model):
         # y: 1D: batch, 2D: n_prds, 3D: n_words; elem=label id
         x_w, x_p, y = variables
         self.inputs = [x_w, x_p, y]
+        self.x = [x_w, x_p]
 
         self.dropout = theano.shared(np.float32(argv.dropout).astype(theano.config.floatX))
         self.set_layers(self.emb)

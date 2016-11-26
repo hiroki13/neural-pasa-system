@@ -1,7 +1,7 @@
 import numpy as np
 import theano
 
-from sample_factory import BasicSampleFactory, StackingSampleFactory, SentSampleFactory
+from sample_factory import BaseSampleFactory, GridSampleFactory, StackingSampleFactory
 from ..ling.vocab import Vocab, UNK, PAD
 from ..utils.io_utils import CorpusLoader, say, load_init_emb, load_data, load_results_dir
 from ..utils.stats import corpus_statistics, sample_statistics, show_case_dist
@@ -31,9 +31,9 @@ class Preprocessor(object):
                                       vocab_label=vocab_label)
 
     def _select_sample_factory(self):
-        if self.argv.model == 'base':
-            return BasicSampleFactory
-        return SentSampleFactory
+        if self.argv.model == 'grid':
+            return GridSampleFactory
+        return BaseSampleFactory
 
     def load_corpus_set(self):
         # corpus: 1D: n_sents, 2D: n_words, 3D: Word()
@@ -59,8 +59,8 @@ class Preprocessor(object):
     def create_samples(self, corpus):
         return self.sample_factory.create_samples(corpus)
 
-    def create_batched_samples(self, samples):
-        return self.sample_factory.create_batched_samples(samples)
+    def create_batch(self, samples):
+        return self.sample_factory.create_batch(samples)
 
     @staticmethod
     def create_vocab_label():

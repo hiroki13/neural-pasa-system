@@ -1,72 +1,77 @@
 import numpy as np
 
+from abc import ABCMeta, abstractmethod
 from ..utils.io_utils import say
 from ..ling.vocab import UNK, NA, GA, O, NI, PRD, GA_LABEL, O_LABEL, NI_LABEL
 
 
 class Sample(object):
+    __metaclass__ = ABCMeta
 
-    def __init__(self, sent, window):
+    def __init__(self, sent, window, vocab_word, vocab_label):
         """
         sent: 1D: n_words; Word()
         word_ids: 1D: n_words; word id
-        prd_indices: 1D: n_prds; word id
-        x_w: 1D: n_prds, 2D: n_words, 3D: window; word id
-        x_p: 1D: n_prds, 2D: n_words; posit phi id
+        prd_indices: 1D: n_prds; prd index
+        x: 1D: n_elems
         y: 1D: n_prds, 2D: n_words; label id
         """
         self.sent = sent
-        self.word_ids = []
-        self.label_ids = []
-        self.word_phi = []
-        self.posit_phi = []
-        self.prd_indices = []
-
         self.n_words = len(sent)
-        self.n_prds = 0
-        self.window = window
-        self.slide = window / 2
+        self.prd_indices = self._set_prd_indices(sent)
+        self.n_prds = len(self.prd_indices)
 
-        self.x_w = []
-        self.x_p = []
-        self.y = []
-        self.inputs = []
+        self.word_ids = self._set_word_ids(sent, vocab_word)
+        self.label_ids = self._set_label_ids(sent, vocab_label)
 
-    def set_params(self, vocab_word, vocab_label):
-        self._set_word_ids(vocab_word)
-        self._set_label_ids(vocab_label)
-        word_phi = self._get_word_phi()
-        posit_phi = self._get_posit_phi()
-        self._set_x_y(word_phi, posit_phi)
+        self.x = self._set_x(window)
+        self.y = self._set_y()
 
-    def _set_word_ids(self, vocab_word):
+    @staticmethod
+    def _set_word_ids(sent, vocab_word):
         word_ids = []
-        for w in self.sent:
+        for w in sent:
             if w.form not in vocab_word.w2i:
                 w_id = vocab_word.get_id(UNK)
             else:
                 w_id = vocab_word.get_id(w.form)
             word_ids.append(w_id)
-        self.word_ids = word_ids
+        return word_ids
 
-    def _set_label_ids(self, vocab_label):
+    @abstractmethod
+    def _set_label_ids(self, sent, vocab_label):
+        raise NotImplementedError
+
+    @staticmethod
+    def _set_prd_indices(sent):
+        return [word.index for word in sent if word.is_prd and word.has_args()]
+
+    @abstractmethod
+    def _set_x(self, window):
+        raise NotImplementedError
+
+    @abstractmethod
+    def _set_y(self):
+        raise NotImplementedError
+
+    @staticmethod
+    def _numpize(sample):
+        return np.asarray(sample, dtype='int32')
+
+
+class BaseSample(Sample):
+
+    def _set_label_ids(self, sent, vocab_label):
         labels = []
-        prd_indices = []
-
-        for word in self.sent:
+        for word in sent:
             if word.is_prd and word.has_args():
-                label_seq = self._create_label_seq(prd=word, vocab_label=vocab_label)
+                label_seq = self._create_label_seq(prd=word, n_words=self.n_words, vocab_label=vocab_label)
                 labels.append(label_seq)
-                prd_indices.append(word.index)
+        return labels
 
-        assert len(labels) == len(prd_indices)
-
-        self.label_ids = labels
-        self.prd_indices = prd_indices
-        self.n_prds = len(prd_indices)
-
-    def _create_label_seq(self, prd, vocab_label):
-        label_seq = [vocab_label.get_id(NA) for i in xrange(self.n_words)]
+    @staticmethod
+    def _create_label_seq(prd, n_words, vocab_label):
+        label_seq = [vocab_label.get_id(NA) for i in xrange(n_words)]
         label_seq[prd.index] = vocab_label.get_id(PRD)
         for case_label, arg_index in enumerate(prd.case_arg_index):
             if arg_index > -1:
@@ -81,14 +86,21 @@ class Sample(object):
                     exit()
         return label_seq
 
-    def _get_word_phi(self):
+    def _set_x(self, window):
+        x_w = self._numpize(self._get_word_phi(window))
+        x_p = self._numpize(self._get_posit_phi(window))
+        return [x_w, x_p]
+
+    def _set_y(self):
+        return self._numpize(self.label_ids)
+
+    def _get_word_phi(self, window):
         phi = []
 
         ###################
         # Argument window #
         ###################
-        window = self.window
-        slide = self.slide
+        slide = window / 2
         sent_len = len(self.word_ids)
         pad = [0 for i in xrange(slide)]
         a_sent_w_ids = pad + self.word_ids + pad
@@ -113,33 +125,22 @@ class Sample(object):
         assert len(phi) == len(self.prd_indices)
         return phi
 
-    def _get_posit_phi(self):
+    def _get_posit_phi(self, window):
         phi = []
+        slide = window / 2
 
-        sent_len = len(self.word_ids)
         for prd_index in self.prd_indices:
-            p_phi = [self._get_mark(prd_index, arg_index) for arg_index in xrange(sent_len)]
+            p_phi = [self._get_mark(prd_index, arg_index, slide) for arg_index in xrange(self.n_words)]
             phi.append(p_phi)
 
         assert len(phi) == len(self.prd_indices)
         return phi
 
-    def _get_mark(self, prd_index, arg_index):
-        slide = self.slide
+    @staticmethod
+    def _get_mark(prd_index, arg_index, slide):
         if prd_index - slide <= arg_index <= prd_index + slide:
             return 0
         return 1
-
-    def _set_x_y(self, word_phi, posit_phi):
-        assert len(word_phi) == len(posit_phi) == len(self.label_ids)
-        self.x_w = self._numpize(word_phi)
-        self.x_p = self._numpize(posit_phi)
-        self.y = self._numpize(self.label_ids)
-        self.inputs = [self.x_w, self.x_p, self.y]
-
-    @staticmethod
-    def _numpize(sample):
-        return np.asarray(sample, dtype='int32')
 
 
 class StackingSample(Sample):
