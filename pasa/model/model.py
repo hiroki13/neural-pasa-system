@@ -3,10 +3,10 @@ import theano
 import theano.tensor as T
 
 from ..utils.io_utils import say
-from ..nn.rnn import RNNLayers, GridObliqueNetwork, ConnectedLayer, BiRNNLayers
+from ..nn.layers import CrankRNNLayers, GridObliqueNetwork, Layer, BiRNNLayers
 from ..nn.nn_utils import L2_sqr
 from ..nn.optimizers import ada_grad, ada_delta, adam, sgd
-from ..nn.seq_labeling import Layer, MEMMLayer, CRFLayer, MixedLayer
+from ..nn.seq_label_model import SoftmaxLayer, MEMMLayer, CRFLayer, MixedLayer
 from ..nn.embedding import EmbeddingLayer
 
 
@@ -91,10 +91,10 @@ class Model(object):
 
         self.emb_layer = EmbeddingLayer(init_emb=init_emb, n_vocab=self.n_vocab, dim_emb=dim_emb,
                                         n_posit=2, dim_posit=dim_posit, fix=argv.fix)
-        self.hidden_layers = RNNLayers(unit=argv.unit, depth=argv.layers, n_in=dim_in, n_h=dim_h)
+        self.hidden_layers = CrankRNNLayers(unit=argv.unit, depth=argv.layers, n_in=dim_in, n_h=dim_h)
 
         if self.argv.output_layer == 0:
-            self.output_layer = Layer(n_i=dim_h, n_labels=dim_out)
+            self.output_layer = SoftmaxLayer(n_i=dim_h, n_labels=dim_out)
         elif self.argv.output_layer == 1:
             self.output_layer = MEMMLayer(n_i=dim_h, n_labels=dim_out)
         else:
@@ -194,9 +194,9 @@ class GridModel(Model):
 
         self.emb_layer = EmbeddingLayer(init_emb=init_emb, n_vocab=self.n_vocab, dim_emb=dim_emb,
                                         n_posit=2, dim_posit=dim_posit, fix=argv.fix)
-        self.emb_connected_layer = ConnectedLayer(n_i=dim_in, n_h=dim_h)
+        self.emb_connected_layer = Layer(n_in=dim_in, n_h=dim_h)
         self.hidden_layers = GridObliqueNetwork(unit=argv.unit, depth=argv.layers, n_in=dim_h, n_h=dim_h)
-        self.output_layer = Layer(n_i=dim_h, n_labels=dim_out)
+        self.output_layer = SoftmaxLayer(n_i=dim_h, n_labels=dim_out)
 
         self.layers.append(self.emb_layer)
         self.layers.append(self.emb_connected_layer)
@@ -278,8 +278,8 @@ class MixedModel(Model):
                                         n_posit=2, dim_posit=dim_posit, fix=argv.fix)
         self.emb_h_layer = BiRNNLayers(unit=argv.unit, depth=argv.layers, n_in=dim_in, n_h=dim_h)
         self.emb_o_layer = MixedLayer(n_i=dim_h)
-        self.hidden_layers = RNNLayers(unit=argv.unit, depth=argv.layers, n_in=dim_h, n_h=dim_h)
-        self.output_layer = Layer(n_i=dim_h, n_labels=dim_out)
+        self.hidden_layers = CrankRNNLayers(unit=argv.unit, depth=argv.layers, n_in=dim_h, n_h=dim_h)
+        self.output_layer = SoftmaxLayer(n_i=dim_h, n_labels=dim_out)
 
         self.layers.append(self.emb_layer)
         self.layers.extend(self.emb_h_layer.layers)
@@ -355,10 +355,10 @@ class StackingModel(GridModel):
 
         self.emb_layer = EmbeddingLayer(init_emb=init_emb, n_vocab=self.n_vocab, dim_emb=dim_emb,
                                         n_posit=2, dim_posit=dim_posit, fix=argv.fix)
-        self.emb_connected_layer = ConnectedLayer(n_i=dim_in, n_h=dim_h)
+        self.emb_connected_layer = Layer(n_in=dim_in, n_h=dim_h)
         self.hidden_layers = GridObliqueNetwork(unit=argv.unit, depth=argv.layers, n_in=dim_h, n_h=dim_h)
-        self.hidden_connected_layer = ConnectedLayer(n_i=dim_h*2+dim_out, n_h=dim_h)
-        self.output_layer = Layer(n_i=dim_h, n_labels=dim_out)
+        self.hidden_connected_layer = Layer(n_in=dim_h * 2 + dim_out, n_h=dim_h)
+        self.output_layer = SoftmaxLayer(n_i=dim_h, n_labels=dim_out)
 
         self.layers.append(self.emb_layer)
         self.layers.append(self.emb_connected_layer)

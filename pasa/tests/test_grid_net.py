@@ -10,7 +10,7 @@ def main():
 
 
 def test_grid_forward():
-    from ..nn.rnn import GridObliqueNetwork
+    from ..nn.layers import GridObliqueNetwork
 
     batch = 1
     n_prds = 2
@@ -21,7 +21,7 @@ def test_grid_forward():
     x = T.ftensor4()
     h = T.zeros(x.shape, dtype=theano.config.floatX)
     # 1D: batch, 2D: n_prds, 3D: dim_h
-    h = grid_net.downward_all(grid_net.layers[0], x, h)
+    h = grid_net._downward_all(grid_net.layers[0], x, h)
 
     f = theano.function(inputs=[x], outputs=h)
 
@@ -30,7 +30,7 @@ def test_grid_forward():
 
 
 def test_grid_propagate():
-    from ..nn.rnn import GridObliqueNetwork
+    from ..nn.layers import GridObliqueNetwork
 
     batch = 2
     n_prds = 2
@@ -48,7 +48,7 @@ def test_grid_propagate():
 
 
 def test_flip():
-    from ..nn.rnn import GridObliqueNetwork
+    from ..nn.layers import GridObliqueNetwork
 
     x = T.fmatrix()
     dim_h = 4

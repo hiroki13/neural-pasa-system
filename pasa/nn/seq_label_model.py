@@ -189,7 +189,7 @@ def greedy_search(h, W_trans):
     return T.concatenate([state_init.dimshuffle('x', 0), states], axis=0)
 
 
-class Layer(object):
+class SoftmaxLayer(object):
 
     def __init__(self, n_i, n_labels):
         self.W = theano.shared(sample_weights(n_i, n_labels))
@@ -269,7 +269,7 @@ class MixedLayer(object):
         return x[v, p.flatten()].reshape((p.shape[0], p.shape[1], x.shape[2]))
 
 
-class RankingLayer(Layer):
+class RankingLayer(SoftmaxLayer):
 
     def __init__(self, n_i, n_labels):
         super(RankingLayer, self).__init__(n_i, n_labels)
