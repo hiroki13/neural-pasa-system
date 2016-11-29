@@ -1,16 +1,16 @@
+import math
 import sys
 import time
-import math
 
 import theano
 import theano.tensor as T
 
-from model import Model, StackingModel, GridModel, MixedModel
-from decoder import Decoder, NBestDecoder
 from io_manager import IOManager
+from model import Model, GridModel
 from result import Results
-from ..utils.io_utils import say
+from ..decoder.decoder import Decoder
 from ..experimenter.evaluator import Eval, TrainEval
+from ..utils.io_utils import say
 
 
 class ModelAPI(object):
@@ -153,34 +153,6 @@ class ModelAPI(object):
         self.model = self.io_manager.load_params(self.model, fn)
 
 
-class NBestModelAPI(ModelAPI):
-
-    def __init__(self, argv):
-        super(NBestModelAPI, self).__init__(argv)
-
-    def set_decoder(self):
-        self.decoder = NBestDecoder(self.argv)
-
-    @staticmethod
-    def eval_one_epoch(batch_y_hat, samples):
-        pred_eval = TrainEval()
-        pred_eval.eval_n_best_list(n_best_lists=batch_y_hat, samples=samples)
-        return pred_eval.all_f1
-
-
-class StackingModelAPI(ModelAPI):
-
-    def __init__(self, argv):
-        super(StackingModelAPI, self).__init__(argv)
-
-    def set_model(self):
-        self.model = StackingModel(argv=self.argv,
-                                   emb=self.emb,
-                                   n_vocab=self.vocab_word.size(),
-                                   n_labels=self.vocab_label.size())
-        self.compile_model()
-
-
 class GridModelAPI(ModelAPI):
 
     def __init__(self, argv):
@@ -206,29 +178,4 @@ class GridModelAPI(ModelAPI):
         for x in sample.x:
             inputs.append([x])
         return inputs
-
-
-class MixedModelAPI(ModelAPI):
-
-    def __init__(self, argv):
-        super(MixedModelAPI, self).__init__(argv)
-
-    def set_model(self):
-        self.model = MixedModel(argv=self.argv,
-                                emb=self.emb,
-                                n_vocab=self.vocab_word.size(),
-                                n_labels=self.vocab_label.size())
-        self.compile_model()
-
-    @staticmethod
-    def _get_input_tensor_variables():
-        # x_w: 1D: batch, 2D: n_words; word id
-        # x_p: 1D: batch, 2D: n_words; arg/prd id
-        # x_m: 1D: batch, 2D: n_prds; prd index
-        # y: 1D: batch, 2D: n_prds, 3D: n_words; label id
-        return T.imatrix('x_w'), T.imatrix('x_p'), T.imatrix('x_m'), T.itensor3('y')
-
-    @staticmethod
-    def create_input_variables(sample):
-        return [sample.x_w], [sample.x_p], [sample.x_m], [sample.y]
 

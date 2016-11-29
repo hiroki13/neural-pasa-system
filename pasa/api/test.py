@@ -1,5 +1,5 @@
+from driver import Driver
 from ..utils.io_utils import say
-from ..driver.driver import Driver
 
 
 def main(argv):

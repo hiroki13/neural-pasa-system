@@ -61,7 +61,7 @@ class Vocab(object):
 
     def add_vocab(self, word_freqs, vocab_cut_off=0):
         for w, freq in sorted(word_freqs.items(), key=lambda (k, v): -v):
-            if freq == vocab_cut_off:
+            if freq <= vocab_cut_off:
                 break
             self.add_word(w)
 

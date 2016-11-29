@@ -1,4 +1,4 @@
-from ..utils.eval import Eval
+from ..experimenter.evaluator import Eval
 
 
 class NBestList(object):

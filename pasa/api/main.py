@@ -65,13 +65,17 @@ if __name__ == '__main__':
     #######################
     # Training Parameters #
     #######################
+    parser.add_argument('--act', default='relu', help='activation function')
     parser.add_argument('--batch_size', type=int, default=8, help='mini batch size')
-    parser.add_argument('--opt', default='adam', help='optimization method')
     parser.add_argument('--epoch', type=int, default=50, help='number of epochs to train')
+    parser.add_argument('--opt', default='adam', help='optimization method')
     parser.add_argument('--lr', type=float, default=0.0075, help='learning rate')
     parser.add_argument('--reg', type=float, default=0.0001, help='learning rate')
     parser.add_argument('--init_emb', default=None, help='Initial embedding to be loaded')
     parser.add_argument('--n_best', type=int, default=10, help='How many best lists are created')
+
+    parser.add_argument('--gru_in', default=None, help='gru inputs to the grid network')
+    parser.add_argument('--gru_connect', default=0, help='gru connections of the grid network')
 
     argv = parser.parse_args()
     print

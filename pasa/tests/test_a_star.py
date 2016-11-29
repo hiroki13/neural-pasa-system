@@ -25,7 +25,7 @@ def test_backward_a_star():
 
 
 def test_gen_graph():
-    from ..ling.graph import Graph
+    from decoder.graph import Graph
     row = 3
     column = 4
     matrix = [[r + c for c in xrange(column)] for r in xrange(row)]

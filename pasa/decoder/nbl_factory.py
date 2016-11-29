@@ -1,6 +1,6 @@
-from io_utils import say
-from eval import Eval
-from ..ling.n_best_list import NBestList
+from utils.io_utils import say
+from n_best_list import NBestList
+from ..experimenter.evaluator import Eval
 
 
 class NBestListFactory(object):

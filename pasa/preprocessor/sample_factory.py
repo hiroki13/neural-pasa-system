@@ -1,7 +1,7 @@
 import numpy as np
 
 from abc import ABCMeta, abstractmethod
-from sample import BaseSample, StackingSample, MixedPrdSample
+from sample import BaseSample
 from batch import BaseBatch, GridBatch
 
 

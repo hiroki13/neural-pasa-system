@@ -2,7 +2,7 @@ from copy import copy
 
 import numpy as np
 
-from ..ling.graph import Graph, Node, PriorityQueue
+from graph import Graph, Node, PriorityQueue
 
 
 class Decoder(object):

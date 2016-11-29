@@ -142,56 +142,17 @@ class BaseSample(Sample):
             return 0
         return 1
 
-
-class StackingSample(Sample):
-
-    def __init__(self, sent, window):
-        super(StackingSample, self).__init__(sent, window)
-        self.sample = sent[0]
-        self.outputs_prob = sent[1]
-        self.outputs_hidden = sent[2]
-        self.n_words = self.sample.n_words
-
-    def set_params(self, vocab_word, vocab_label):
-        self._set_label_ids(vocab_label)
-        self._set_x_y(self.outputs_hidden, self.outputs_prob)
-
-    def _set_label_ids(self, vocab_label):
-        sample = self.sample
-        self.label_ids = sample.label_ids
-        self.prd_indices = sample.prd_indices
-        self.n_prds = sample.n_prds
-
-    def _set_x_y(self, word_phi, posit_phi):
-        assert len(word_phi) == len(posit_phi) == len(self.label_ids)
-        self.x_w = self._numpize(word_phi)
-        self.x_p = self._numpize(posit_phi)
-        self.y = self._numpize(self.label_ids)
-        self.inputs = [self.x_w, self.x_p, self.y]
-
     @staticmethod
-    def _numpize(sample):
-        return np.asarray(sample, dtype='float32')
-
-
-class MixedPrdSample(Sample):
-
-    def __init__(self, sent, window):
-        super(MixedPrdSample, self).__init__(sent, window)
-        self.x_m = []
-
-    def _get_word_phi(self):
-        return self.word_ids
-
-    def _get_posit_phi(self):
-        phi = [0 for i in xrange(len(self.sent))]
-        for prd_index in self.prd_indices:
-            phi[prd_index] = 1
-        return phi
-
-    def _set_x_y(self, word_phi, posit_phi):
-        self.x_w = self._numpize(word_phi)
-        self.x_p = self._numpize(posit_phi)
-        self.x_m = self._numpize(self.prd_indices)
-        self.y = self._numpize(self.label_ids)
-        self.inputs = [self.x_w, self.x_p, self.x_m, self.y]
+    def _get_relative_posit(prd_index, arg_index):
+        dist = arg_index - prd_index
+        if -5 <= dist < 0:
+            return -1 * dist + 5
+        elif 5 < dist < 10:
+            return 11
+        elif -10 < dist < -5:
+            return 12
+        elif dist <= -10:
+            return 13
+        elif dist >= 10:
+            return 14
+        return dist
