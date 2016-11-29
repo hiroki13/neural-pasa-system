@@ -102,7 +102,9 @@ class CrankRNNLayers(RNNLayers):
         for layer in self.layers:
             h = layer.forward_all(x, h0)
             x = (h + x)[::-1]
-        return x + h
+        if (self.depth % 2) == 1:
+            x = x[::-1]
+        return x
 
     def lstm_forward(self, x):
         h0 = T.zeros((x.shape[1], x.shape[2]), dtype=theano.config.floatX)
@@ -110,7 +112,9 @@ class CrankRNNLayers(RNNLayers):
         for layer in self.layers:
             h, c = layer.forward_all(x, h0, c0)
             x = (h + x)[::-1]
-        return x + h
+        if (self.depth % 2) == 1:
+            x = x[::-1]
+        return x
 
 
 class BiRNNLayers(RNNLayers):

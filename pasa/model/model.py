@@ -135,10 +135,7 @@ class Model(object):
         :param x: 1D: n_words, 2D: batch, 3D: dim_h
         :return: 1D: n_words, 2D: batch, 3D: n_labels
         """
-        h = self.layers[-1].forward(x)
-        if (self.argv.layers % 2) == 0:
-            h = h[::-1]
-        return h
+        return self.layers[-1].forward(x)
 
     def objective_f(self, o, reg):
         p_y = self.output_layer.get_y_prob(o, self.y_gold.dimshuffle((1, 0)))
