@@ -35,15 +35,8 @@ class Experimenter(object):
         self._setup_model_api()
 
     def _setup_corpus(self):
-        self.corpus_set = self._load_corpus_set()
-        self._show_corpus_stats(self.corpus_set)
-
-    def _load_corpus_set(self):
-        self.preprocessor.set_corpus_loader()
-        return self.preprocessor.load_corpus_set()
-
-    def _show_corpus_stats(self, corpus_set):
-        self.preprocessor.show_corpus_stats(corpus_set)
+        self.corpus_set = self.preprocessor.load_corpus_set()
+        self.preprocessor.show_corpus_stats(self.corpus_set)
 
     @abstractmethod
     def _setup_word(self):

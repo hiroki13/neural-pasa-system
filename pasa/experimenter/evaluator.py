@@ -223,9 +223,6 @@ class Eval(object):
 
 class TrainEval(Eval):
 
-    def __init__(self):
-        super(TrainEval, self).__init__()
-
     def _set_params(self):
         self.corrects = np.zeros(3, dtype='float32')
         self.results_sys = np.zeros(3, dtype='float32')

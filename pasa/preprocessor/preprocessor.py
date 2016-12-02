@@ -1,28 +1,31 @@
 import numpy as np
 import theano
 
-from sample_factory import BaseSampleFactory, GridSampleFactory, StackingSampleFactory
+from abc import ABCMeta, abstractmethod
+from sample_factory import BaseSampleFactory, GridSampleFactory, MentionPairSampleFactory
 from ..ling.vocab import Vocab, UNK, PAD
-from ..utils.io_utils import CorpusLoader, say, load_init_emb, load_data, load_results_dir
+from ..utils.io_utils import CorpusLoader, say, load_init_emb
 from ..utils.stats import corpus_statistics, sample_statistics, show_case_dist
 
 
 class Preprocessor(object):
+    __metaclass__ = ABCMeta
 
     def __init__(self, argv, config=None):
         self.argv = argv
-        self.window = self.set_window_size(argv, config)
-        self.corpus_loader = None
+        self.window = self._set_window_size(argv, config)
+        self.corpus_loader = self._set_corpus_loader(argv)
         self.sample_factory = None
 
     @staticmethod
-    def set_window_size(argv, config):
+    def _set_window_size(argv, config):
         if config is not None:
             return config.window
         return argv.window
 
-    def set_corpus_loader(self):
-        self.corpus_loader = CorpusLoader(min_unit='word', data_size=self.argv.data_size)
+    @staticmethod
+    def _set_corpus_loader(argv):
+        return CorpusLoader(min_unit='word', data_size=argv.data_size)
 
     def set_sample_factory(self, vocab_word, vocab_label):
         factory = self._select_sample_factory()
@@ -31,33 +34,32 @@ class Preprocessor(object):
                                       vocab_label=vocab_label)
 
     def _select_sample_factory(self):
-        if self.argv.model == 'grid':
+        if self.argv.model == 'inter':
+            return MentionPairSampleFactory
+        elif self.argv.model == 'grid':
             return GridSampleFactory
         return BaseSampleFactory
 
     def load_corpus_set(self):
+        cl = self.corpus_loader
         # corpus: 1D: n_sents, 2D: n_words, 3D: Word()
-        train_corpus = self.corpus_loader.load_corpus(path=self.argv.train_data)
-        dev_corpus = self.corpus_loader.load_corpus(path=self.argv.dev_data)
-        test_corpus = self.corpus_loader.load_corpus(path=self.argv.test_data)
+        train_corpus = cl.load_corpus(path=self.argv.train_data)
+        dev_corpus = cl.load_corpus(path=self.argv.dev_data)
+        test_corpus = cl.load_corpus(path=self.argv.test_data)
         return train_corpus, dev_corpus, test_corpus
 
     def create_sample_set(self, corpus_set):
+        sf = self.sample_factory
         # samples: 1D: n_sents; Sample
         train_corpus, dev_corpus, test_corpus = corpus_set
-        train_samples = self.create_samples(self._flatten(train_corpus))
-        dev_samples = self.create_samples(self._flatten(dev_corpus))
-        test_samples = self.create_samples(self._flatten(test_corpus))
+        train_samples = sf.create_samples(self._format_corpus(train_corpus))
+        dev_samples = sf.create_samples(self._format_corpus(dev_corpus))
+        test_samples = sf.create_samples(self._format_corpus(test_corpus))
         return train_samples, dev_samples, test_samples
 
-    @staticmethod
-    def _flatten(corpus):
-        if corpus:
-            return [sample for doc in corpus for sample in doc]
-        return None
-
-    def create_samples(self, corpus):
-        return self.sample_factory.create_samples(corpus)
+    @abstractmethod
+    def _format_corpus(self, corpus):
+        raise NotImplementedError
 
     def create_batch(self, samples):
         return self.sample_factory.create_batch(samples)
@@ -153,57 +155,22 @@ class Preprocessor(object):
         return vocab_word
 
 
-class StackingPreprocessor(Preprocessor):
+class BasePreprocessor(Preprocessor):
 
-    def __init__(self, argv):
-        super(StackingPreprocessor, self).__init__(argv)
+    def _format_corpus(self, corpus):
+        if corpus:
+            return [sample for doc in corpus for sample in doc]
+        return None
 
-    def create_vocab_word(self, corpus):
-        vocab_word = Vocab()
-        vocab_word.set_init_word()
-        corpus = self.create_corpus(corpus)
-        vocab_word.add_vocab_from_corpus(corpus=corpus, vocab_cut_off=self.argv.vocab_cut_off)
-        vocab_word.add_word(UNK)
-        say('\nVocab: %d\tType: word\n' % vocab_word.size())
-        return vocab_word
 
-    @staticmethod
-    def create_corpus(results):
-        return [[sample.sent for sample in results.samples]]
+class InterPreprocessor(Preprocessor):
+
+    def _format_corpus(self, corpus):
+        if corpus:
+            return corpus
+        return None
 
     @staticmethod
-    def show_corpus_stats(corpora):
+    def show_sample_stats(sample_set, vocab_label):
         pass
 
-    def set_sample_factory(self, vocab_word, vocab_label):
-        self.sample_factory = StackingSampleFactory(vocab_word=vocab_word,
-                                                    vocab_label=vocab_label,
-                                                    batch_size=self.argv.batch_size,
-                                                    window_size=self.argv.window)
-
-    def create_sample_set(self, corpus_set):
-        # samples: 1D: n_sents; Sample
-        train_corpus, dev_corpus, test_corpus = corpus_set
-        train_corpus = self.concatenate_results(train_corpus)
-        vocab_word = self.create_vocab_word(train_corpus)
-        train_samples = self.create_samples(train_corpus)
-        dev_samples = self.create_samples(dev_corpus)
-        test_samples = self.create_samples(test_corpus)
-        return (train_samples, dev_samples, test_samples), vocab_word
-
-    def load_corpus_set(self):
-        # corpus: 1D: n_sents, 2D: n_words, 3D: Word()
-        train_corpus = load_results_dir(self.argv.train_data)
-        dev_corpus = load_data(self.argv.dev_data)
-        test_corpus = load_data(self.argv.test_data)
-        return train_corpus, dev_corpus, test_corpus
-
-    @staticmethod
-    def concatenate_results(results):
-        res = results.pop(0)
-        for r in results:
-            for s, op, oh in zip(r.samples, r.outputs_prob, r.outputs_hidden):
-                res.samples.append(s)
-                res.outputs_prob.append(op)
-                res.outputs_hidden.append(oh)
-        return res

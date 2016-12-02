@@ -41,21 +41,12 @@ class EmbeddingLayer(object):
 
 class Layer(object):
 
-    def __init__(self, n_in=32, n_h=32, activation='relu'):
-        self.activation = self.select_activation_func(activation)
+    def __init__(self, n_in=32, n_h=32):
         self.W = theano.shared(sample_weights(n_in, n_h))
         self.params = [self.W]
 
-    @staticmethod
-    def select_activation_func(activation):
-        if activation == 'relu':
-            return relu
-        elif activation == 'sigmoid':
-            return sigmoid
-        return tanh
-
     def dot(self, x):
-        return self.activation(T.dot(x, self.W))
+        return T.dot(x, self.W)
 
 
 class RNNLayers(object):

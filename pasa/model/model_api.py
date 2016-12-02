@@ -6,7 +6,7 @@ import theano
 import theano.tensor as T
 
 from io_manager import IOManager
-from model import Model, GridModel
+from model import Model, GridModel, MentionPairModel
 from result import Results
 from ..decoder.decoder import Decoder
 from ..experimenter.evaluator import Eval, TrainEval
@@ -86,18 +86,19 @@ class ModelAPI(object):
         start = time.time()
         batch.shuffle_batches()
 
-        for index, batch in enumerate(batch.batches):
+        for index, one_batch in enumerate(batch.batches):
             if index != 0 and index % 1000 == 0:
                 print index,
                 sys.stdout.flush()
 
-            result_sys, result_gold, nll = self.train(*batch)
+            result_sys, result_gold, nll = self.train(*one_batch)
             assert not math.isnan(nll), 'NLL is NAN: Index: %d' % index
 
             train_eval.update_results(result_sys, result_gold)
             train_eval.nll += nll
 
         print '\tTime: %f' % (time.time() - start)
+        train_eval.nll /= float(len(batch.batches))
         train_eval.show_results()
 
     def predict_one_epoch(self, samples):
@@ -155,9 +156,6 @@ class ModelAPI(object):
 
 class GridModelAPI(ModelAPI):
 
-    def __init__(self, argv):
-        super(GridModelAPI, self).__init__(argv)
-
     def set_model(self):
         self.model = GridModel(argv=self.argv,
                                emb=self.emb,
@@ -179,3 +177,25 @@ class GridModelAPI(ModelAPI):
             inputs.append([x])
         return inputs
 
+
+class MentionPairModelAPI(ModelAPI):
+
+    def set_model(self):
+        self.model = MentionPairModel(argv=self.argv,
+                                      emb=self.emb,
+                                      n_vocab=self.vocab_word.size(),
+                                      n_labels=self.vocab_label.size())
+        self.compile_model()
+
+    @staticmethod
+    def _get_input_tensor_variables():
+        # x_w: 1D: batch, 2D: n_phi; word id
+        # y: 1D: batch; label id
+        return T.imatrix('x_w'), T.ivector('y')
+
+    @staticmethod
+    def create_input_variables(sample):
+        inputs = []
+        for x in sample.x:
+            inputs.append([x])
+        return inputs

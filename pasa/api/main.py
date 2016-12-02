@@ -31,14 +31,14 @@ if __name__ == '__main__':
     ###########
     # Outputs #
     ###########
-    parser.add_argument('--output_fn', type=str, default=None, help='Output file name')
-    parser.add_argument('--output_dir', type=str, default=None, help='Output directory name')
+    parser.add_argument('--output_fn', type=str, default=None, help='output file name')
+    parser.add_argument('--output_dir', type=str, default=None, help='output directory name')
     parser.add_argument('--output', type=str, default=None, help='n_best/pretrain')
 
     #########
     # Model #
     #########
-    parser.add_argument('--model', type=str, default='base', help='base/rank/rerank/sep/jack')
+    parser.add_argument('--model', type=str, default='base', help='base/grid')
     parser.add_argument('--save', type=int, default=1, help='save model')
     parser.add_argument('--result', type=bool, default=False, help='output results')
 
@@ -65,7 +65,6 @@ if __name__ == '__main__':
     #######################
     # Training Parameters #
     #######################
-    parser.add_argument('--act', default='relu', help='activation function')
     parser.add_argument('--batch_size', type=int, default=8, help='mini batch size')
     parser.add_argument('--epoch', type=int, default=50, help='number of epochs to train')
     parser.add_argument('--opt', default='adam', help='optimization method')

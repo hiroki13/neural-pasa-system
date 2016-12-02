@@ -4,6 +4,8 @@ from ..experimenter.epoch_manager import *
 from ..preprocessor.preprocessor import *
 from ..model.model_api import *
 
+from ..utils.io_utils import load_data
+
 
 class Driver(object):
 
@@ -34,41 +36,22 @@ class Driver(object):
 
     @staticmethod
     def _select_trainer(argv):
-        if argv.model == 'jack':
-            return JackKnifeTrainer
-        elif argv.model == 'sep':
-            return TrainCorpusSeparator
-        elif argv.model == 'stack':
-            return StackingTrainer
         return Trainer
 
     @staticmethod
     def _select_tester(argv):
-        if argv.model == 'nbest':
-            return NBestTester
-        elif argv.model == 'jack':
-            return JackKnifeTester
         return Tester
 
     @staticmethod
     def _select_preprocessor(argv):
-        if argv.model == 'stack':
-            return StackingPreprocessor
-        return Preprocessor
+        if argv.model == 'inter':
+            return InterPreprocessor
+        return BasePreprocessor
 
     @staticmethod
     def _select_model_api(argv):
-        if argv.model == 'nbest':
-            return NBestModelAPI
-        elif argv.model == 'stack':
-            return StackingModelAPI
-        elif argv.model == 'grid':
+        if argv.model == 'grid':
             return GridModelAPI
-        elif argv.model == 'mixed':
-            return MixedModelAPI
-        elif argv.model == 'jack':
-            if argv.output == 'n_best':
-                return NBestModelAPI
         return ModelAPI
 
     @staticmethod

@@ -5,9 +5,9 @@ from random import shuffle
 class Batch(object):
     __metaclass__ = ABCMeta
 
-    def __init__(self, batch_size, samples):
+    def __init__(self, batch_size, samples, n_inputs=None):
         self.batch_size = batch_size
-        self.n_inputs = len(samples[0].x) + 1
+        self.n_inputs = len(samples[0].x) + 1 if n_inputs is None else n_inputs
         self.samples = samples
         self.batches = self._set_batches()
 
@@ -49,11 +49,11 @@ class Batch(object):
                                             add_input_to_batch=self._add_sample_to_batch)
 
     def shuffle_batches(self):
-        return self.batch_creating_template(input_vals=self.batches,
-                                            preprocess=self._preprocess_batches,
-                                            get_prev_elems=self._get_prev_elems_batches,
-                                            get_elems=self._get_elems_batches,
-                                            add_input_to_batch=self._add_input_to_batch)
+        self.batches = self.batch_creating_template(input_vals=self.batches,
+                                                    preprocess=self._preprocess_batches,
+                                                    get_prev_elems=self._get_prev_elems_batches,
+                                                    get_elems=self._get_elems_batches,
+                                                    add_input_to_batch=self._add_input_to_batch)
 
     @abstractmethod
     def _preprocess_samples(self, samples):
@@ -203,6 +203,50 @@ class GridBatch(BaseBatch):
     def _add_sample_to_batch(self, batch, sample):
         inputs = sample.x + [sample.y]
         for i, elem in enumerate(inputs):
+            batch[i].append(elem)
+        return batch
+
+    def _add_input_to_batch(self, batch, input_val):
+        for i, elem in enumerate(input_val):
+            batch[i].append(elem)
+        return batch
+
+
+class MentionPairBatch(Batch):
+
+    def __init__(self, batch_size, samples):
+        super(MentionPairBatch, self).__init__(batch_size, samples, 2)
+
+    def _preprocess_samples(self, samples):
+        flattened = []
+        for sample in samples:
+            for x, y in zip(sample.x, sample.y):
+                flattened.append((x, y))
+        shuffle(flattened)
+        return flattened
+
+    def _preprocess_batches(self, batches):
+        return self._separate_batches(batches)
+
+    def _get_prev_elems_samples(self, samples):
+        return None
+
+    def _get_prev_elems_batches(self, input_vals):
+        return None
+
+    def _get_elems_samples(self, sample):
+        return None
+
+    def _get_elems_batches(self, input_val):
+        return None
+
+    def _is_batch_boundary(self, elems, prev_elems, n_samples):
+        if n_samples >= self.batch_size:
+            return True
+        return False
+
+    def _add_sample_to_batch(self, batch, sample):
+        for i, elem in enumerate(sample):
             batch[i].append(elem)
         return batch
 

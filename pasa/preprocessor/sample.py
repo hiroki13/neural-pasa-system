@@ -27,24 +27,17 @@ class Sample(object):
         self.x = self._set_x(window)
         self.y = self._set_y()
 
-    @staticmethod
-    def _set_word_ids(sent, vocab_word):
-        word_ids = []
-        for w in sent:
-            if w.form not in vocab_word.w2i:
-                w_id = vocab_word.get_id(UNK)
-            else:
-                w_id = vocab_word.get_id(w.form)
-            word_ids.append(w_id)
-        return word_ids
+    @abstractmethod
+    def _set_word_ids(self, sent, vocab_word):
+        raise NotImplementedError
 
     @abstractmethod
     def _set_label_ids(self, sent, vocab_label):
         raise NotImplementedError
 
-    @staticmethod
-    def _set_prd_indices(sent):
-        return [word.index for word in sent if word.is_prd and word.has_args()]
+    @abstractmethod
+    def _set_prd_indices(self, sent):
+        raise NotImplementedError
 
     @abstractmethod
     def _set_x(self, window):
@@ -61,6 +54,16 @@ class Sample(object):
 
 class BaseSample(Sample):
 
+    def _set_word_ids(self, sent, vocab_word):
+        word_ids = []
+        for w in sent:
+            if w.form not in vocab_word.w2i:
+                w_id = vocab_word.get_id(UNK)
+            else:
+                w_id = vocab_word.get_id(w.form)
+            word_ids.append(w_id)
+        return word_ids
+
     def _set_label_ids(self, sent, vocab_label):
         labels = []
         for word in sent:
@@ -68,6 +71,9 @@ class BaseSample(Sample):
                 label_seq = self._create_label_seq(prd=word, n_words=self.n_words, vocab_label=vocab_label)
                 labels.append(label_seq)
         return labels
+
+    def _set_prd_indices(self, sent):
+        return [word.index for word in sent if word.is_prd and word.has_args()]
 
     @staticmethod
     def _create_label_seq(prd, n_words, vocab_label):
@@ -156,3 +162,67 @@ class BaseSample(Sample):
         elif dist >= 10:
             return 14
         return dist
+
+
+class MentionPairSample(Sample):
+
+    def _set_word_ids(self, doc, vocab_word):
+        word_ids = []
+        for sent in doc:
+            tmp_word_ids = []
+            for w in sent:
+                if w.form not in vocab_word.w2i:
+                    w_id = vocab_word.get_id(UNK)
+                else:
+                    w_id = vocab_word.get_id(w.form)
+                tmp_word_ids.append(w_id)
+            word_ids.append(tmp_word_ids)
+        return word_ids
+
+    def _set_label_ids(self, doc, vocab_label):
+        labels = []
+        for sent in doc:
+            for word in sent:
+                if word.is_prd:
+                    for case_index, indices in enumerate(word.inter_case_arg_index):
+                        label = self._create_label(prd=word, doc=doc, case_index=case_index, indices=indices)
+                        labels.extend(label)
+        return labels
+
+    @staticmethod
+    def _create_label(prd, doc, case_index, indices):
+        labels = []
+        p_index = (prd.sent_index, prd.index)
+        for sent in doc:
+            for word in sent:
+                a_index = (word.sent_index, word.index)
+                if a_index in indices:
+                    labels.append((p_index, a_index, case_index, 1))
+                else:
+                    labels.append((p_index, a_index, case_index, 0))
+        return labels
+
+    def _set_prd_indices(self, doc):
+        return [(w.sent_index, w.index) for sent in doc for w in sent if w.is_prd]
+
+    def _set_x(self, window):
+        return self._numpize(self.extract_phi(self.label_ids))
+
+    def extract_phi(self, label_sets):
+        return [self.extract_phi_each(label_set, self.word_ids) for label_set in label_sets]
+
+    @staticmethod
+    def extract_phi_each(label_set, doc):
+        p_index, a_index, case_index, label = label_set
+        p_sent_index, p_word_index = p_index
+        a_sent_index, a_word_index = a_index
+        p_id = doc[p_sent_index][p_word_index]
+        a_id = doc[a_sent_index][a_word_index]
+        return [p_id, a_id]
+
+    def _set_y(self):
+        return self._numpize(self.extract_label(self.label_ids))
+
+    @staticmethod
+    def extract_label(label_sets):
+        return [label_set[-1] for label_set in label_sets]
