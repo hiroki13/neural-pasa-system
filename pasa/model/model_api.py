@@ -199,3 +199,36 @@ class MentionPairModelAPI(ModelAPI):
         for x in sample.x:
             inputs.append([x])
         return inputs
+
+    def train_one_epoch(self, batch):
+        crr = 0.
+        ttl_p = 0.
+        ttl_r = 0.
+        ttl_nll = 0.
+        start = time.time()
+        batch.shuffle_batches()
+
+        for index, one_batch in enumerate(batch.batches):
+            if index != 0 and index % 1000 == 0:
+                print index,
+                sys.stdout.flush()
+
+            result_sys, result_gold, nll = self.train(*one_batch)
+            assert not math.isnan(nll), 'NLL is NAN: Index: %d' % index
+
+            for s, g in zip(result_sys, result_gold):
+                if s == g == 1:
+                    crr += 1
+                if s == 1:
+                    ttl_p += 1
+                if g == 1:
+                    ttl_r += 1
+            ttl_nll += nll
+
+        precision = crr / ttl_p
+        recall = crr / ttl_r
+        f1 = 2 * precision * recall / (precision + recall)
+        print '\tTime: %f' % (time.time() - start)
+        say('\tNLL: %f  F1: %f  Precision: %f (%d/%d)  Recall: %f (%d/%d)' % (ttl_nll, f1, precision, crr, ttl_p,
+                                                                              recall, crr, ttl_r))
+

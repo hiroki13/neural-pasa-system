@@ -136,7 +136,8 @@ class BaseSample(Sample):
         slide = window / 2
 
         for prd_index in self.prd_indices:
-            p_phi = [self._get_mark(prd_index, arg_index, slide) for arg_index in xrange(self.n_words)]
+#            p_phi = [self._get_mark(prd_index, arg_index, slide) for arg_index in xrange(self.n_words)]
+            p_phi = [self._get_relative_posit(prd_index, arg_index) for arg_index in xrange(self.n_words)]
             phi.append(p_phi)
 
         assert len(phi) == len(self.prd_indices)
@@ -149,8 +150,8 @@ class BaseSample(Sample):
         return 1
 
     @staticmethod
-    def _get_relative_posit(prd_index, arg_index):
-        dist = arg_index - prd_index
+    def _get_relative_posit(w1, w2):
+        dist = w2 - w1
         if -5 <= dist < 0:
             return -1 * dist + 5
         elif 5 < dist < 10:
@@ -191,16 +192,17 @@ class MentionPairSample(Sample):
 
     @staticmethod
     def _create_label(prd, doc, case_index, indices):
-        labels = []
+        p_labels = []
+        n_labels = []
         p_index = (prd.sent_index, prd.index)
         for sent in doc:
             for word in sent:
                 a_index = (word.sent_index, word.index)
                 if a_index in indices:
-                    labels.append((p_index, a_index, case_index, 1))
+                    p_labels.append((p_index, a_index, case_index, 1))
                 else:
-                    labels.append((p_index, a_index, case_index, 0))
-        return labels
+                    n_labels.append((p_index, a_index, case_index, 0))
+        return p_labels + n_labels[-1:]
 
     def _set_prd_indices(self, doc):
         return [(w.sent_index, w.index) for sent in doc for w in sent if w.is_prd]

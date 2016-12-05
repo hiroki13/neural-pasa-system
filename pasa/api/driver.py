@@ -52,6 +52,8 @@ class Driver(object):
     def _select_model_api(argv):
         if argv.model == 'grid':
             return GridModelAPI
+        elif argv.model == 'inter':
+            return MentionPairModelAPI
         return ModelAPI
 
     @staticmethod

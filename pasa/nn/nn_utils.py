@@ -86,6 +86,10 @@ def normalize_3d(x, eps=1e-8):
     return x / (l2 + eps)
 
 
+def binary_cross_entropy(y, y_p):
+    return - (T.sum(y * T.log(y_p)) + T.sum((1 - y) * T.log(1. - y_p)))
+
+
 def hinge_loss(pos_scores, neg_scores):
     """
     :param pos_scores: 1D: batch, 2D: n_labels
