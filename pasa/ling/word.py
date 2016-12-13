@@ -146,3 +146,15 @@ class Word(object):
             if arg_index > -1:
                 return True
         return False
+
+
+class ConllWord(object):
+
+    def __init__(self, elem, file_encoding='utf-8'):
+        self.index = int(elem[0])
+        self.form = elem[1].decode(file_encoding)
+        self.cpos = elem[2].decode(file_encoding)
+        self.pos = elem[3].decode(file_encoding)
+        self.alt = elem[4].decode(file_encoding)
+        self.chunk_index = int(elem[5])
+        self.chunk_head = int(elem[6])

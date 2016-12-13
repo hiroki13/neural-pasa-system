@@ -15,11 +15,12 @@ if __name__ == '__main__':
     ########
     # Mode #
     ########
-    parser.add_argument('-mode', default='train', help='train/test')
+    parser.add_argument('-mode', default='train', help='train/test/eval')
 
     ##########
     # Inputs #
     ##########
+    parser.add_argument('--data', default=None, help='path to data')
     parser.add_argument('--train_data', default=None, help='path to training data')
     parser.add_argument('--dev_data', default=None, help='path to development data')
     parser.add_argument('--test_data', default=None, help='path to test data')
@@ -55,16 +56,19 @@ if __name__ == '__main__':
     parser.add_argument('--unit', default='gru', help='unit')
     parser.add_argument('--fix', type=int, default=0, help='fix or not init embeddings')
     parser.add_argument('--layers',  type=int, default=1, help='number of layers')
-    parser.add_argument('--output_layer',  type=int, default=0, help='softmax/memm/crf')
     parser.add_argument('--window', type=int, default=5, help='window size for convolution')
     parser.add_argument('--dim_emb',    type=int, default=32, help='dimension of word embeddings')
     parser.add_argument('--dim_posit',  type=int, default=5, help='dimension of position embeddings')
     parser.add_argument('--dim_hidden', type=int, default=32, help='dimension of hidden layer')
     parser.add_argument('--dropout', type=float, default=0.0, help='dropout prob')
 
+    parser.add_argument('--hidden_layer',  type=int, default=0, help='crank/bi-rnn')
+    parser.add_argument('--output_layer',  type=int, default=0, help='softmax/memm/crf')
+
     #######################
     # Training Parameters #
     #######################
+    parser.add_argument('--phi_type', default='rel', help='feature types mark/rel')
     parser.add_argument('--batch_size', type=int, default=8, help='mini batch size')
     parser.add_argument('--epoch', type=int, default=50, help='number of epochs to train')
     parser.add_argument('--opt', default='adam', help='optimization method')
@@ -73,6 +77,7 @@ if __name__ == '__main__':
     parser.add_argument('--init_emb', default=None, help='Initial embedding to be loaded')
     parser.add_argument('--n_best', type=int, default=10, help='How many best lists are created')
 
+    parser.add_argument('--res', type=int, default=1, help='residual connections')
     parser.add_argument('--gru_in', default=None, help='gru inputs to the grid network')
     parser.add_argument('--gru_connect', default=0, help='gru connections of the grid network')
 
@@ -87,6 +92,9 @@ if __name__ == '__main__':
     if argv.mode == 'train':
         import train
         train.main(argv)
-    else:
+    elif argv.mode == 'test':
         import test
         test.main(argv)
+    else:
+        import eval
+        eval.main(argv)

@@ -54,7 +54,7 @@ class Driver(object):
             return GridModelAPI
         elif argv.model == 'inter':
             return MentionPairModelAPI
-        return ModelAPI
+        return BaseModelAPI
 
     @staticmethod
     def _select_epoch_manager(argv):

@@ -3,7 +3,7 @@ import theano
 import theano.tensor as T
 
 from ..utils.io_utils import say
-from ..nn.layers import Layer, EmbeddingLayer, CrankRNNLayers, GridObliqueNetwork
+from ..nn.layers import Layer, EmbeddingLayer, BiRNNLayers, CrankRNNLayers, GridObliqueNetwork, GridAttentionNetwork
 from ..nn.nn_utils import L2_sqr, sigmoid, binary_cross_entropy
 from ..nn.optimizers import ada_grad, ada_delta, adam, sgd
 from ..nn.seq_label_model import SoftmaxLayer, MEMMLayer, CRFLayer
@@ -93,7 +93,10 @@ class Model(object):
         self.emb_layers.append(EmbeddingLayer(init_emb=None, n_vocab=15, dim_emb=dim_posit, fix=argv.fix, pad=0))
         self.emb_layers.append(Layer(n_in=dim_in, n_h=dim_h))
 
-        self.hidden_layers = CrankRNNLayers(argv=argv, unit=argv.unit, depth=argv.layers, n_in=dim_h, n_h=dim_h)
+        if self.argv.hidden_layer == 0:
+            self.hidden_layers = CrankRNNLayers(argv=argv, unit=argv.unit, depth=argv.layers, n_in=dim_h, n_h=dim_h)
+        else:
+            self.hidden_layers = BiRNNLayers(argv=argv, unit=argv.unit, depth=argv.layers, n_in=dim_h, n_h=dim_h)
 
         if self.argv.output_layer == 0:
             self.output_layer = SoftmaxLayer(n_i=dim_h, n_labels=dim_out)
@@ -105,7 +108,7 @@ class Model(object):
         self.layers.extend(self.emb_layers)
         self.layers.extend(self.hidden_layers.layers)
         self.layers.append(self.output_layer)
-        say('No. of layers: %d\n' % len(self.hidden_layers.layers))
+        say('No. of layers: %d\n' % self.argv.layers)
 
     def set_params(self):
         for l in self.layers:
@@ -119,7 +122,8 @@ class Model(object):
         :return: 1D: batch, 2D: n_words, 3D: dim_in (dim_emb * (5 + window + 1))
         """
         x_w = self.emb_layers[0].lookup(x_w).reshape((x_w.shape[0], x_w.shape[1], -1))
-        x_p = self.emb_layers[1].lookup(x_p)
+#        x_p = self.emb_layers[1].lookup(x_p)
+        x_p = self.emb_layers[1].lookup(x_p).reshape((x_p.shape[0], x_p.shape[1], -1))
         x = T.concatenate([x_w, x_p], axis=2)
         return self.emb_layers[2].dot(x).dimshuffle(1, 0, 2)
 
@@ -193,13 +197,17 @@ class GridModel(Model):
         self.emb_layers.append(EmbeddingLayer(init_emb=None, n_vocab=15, dim_emb=dim_posit, fix=argv.fix, pad=0))
         self.emb_layers.append(Layer(n_in=dim_in, n_h=dim_h))
 
-        self.hidden_layers = GridObliqueNetwork(argv=argv, unit=argv.unit, depth=argv.layers, n_in=dim_h, n_h=dim_h)
+        if self.argv.hidden_layer == 0:
+            self.hidden_layers = GridObliqueNetwork(argv=argv, unit=argv.unit, depth=argv.layers, n_in=dim_h, n_h=dim_h)
+        else:
+            self.hidden_layers = GridAttentionNetwork(argv=argv, unit=argv.unit, depth=argv.layers, n_in=dim_h, n_h=dim_h)
+
         self.output_layer = SoftmaxLayer(n_i=dim_h, n_labels=dim_out)
 
         self.layers.extend(self.emb_layers)
         self.layers.extend(self.hidden_layers.layers)
         self.layers.append(self.output_layer)
-        say('No. of rnn layers: %d\n' % (len(self.hidden_layers.layers)))
+        say('No. of rnn layers: %d\n' % self.argv.layers)
 
     def emb_layer_forward(self, x_w, x_p):
         """
@@ -208,7 +216,8 @@ class GridModel(Model):
         :return: 1D: batch, 2D: n_prds, 3D: n_words, 4D: dim_h
         """
         x_w = self.emb_layers[0].lookup(x_w).reshape((x_w.shape[0], x_w.shape[1], x_w.shape[2], -1))
-        x_p = self.emb_layers[1].lookup(x_p)
+#        x_p = self.emb_layers[1].lookup(x_p)
+        x_p = self.emb_layers[1].lookup(x_p).reshape((x_p.shape[0], x_p.shape[1], x_p.shape[2], -1))
         x = T.concatenate([x_w, x_p], axis=3)
         return self.emb_layers[2].dot(x)
 

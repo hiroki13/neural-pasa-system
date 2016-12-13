@@ -117,10 +117,10 @@ class IOManager(object):
         text = ''
         for r_s, r_g, prd_index in zip(result_sys, result_gold, prd_indices):
             prd = sent[prd_index]
-            text += '#\tPRD\t%d:%s\n' % (prd_index, prd.form)
+            text += '#\tPRD\t%d:%s:%s:%s\n' % (prd_index, prd.form, prd.cpos, prd.alt)
             text += '*\tGold\t'
             text += self._generate_analyzed_pas_info_each(sent, r_g)
-            text += '\n*\tPred\t'
+            text += '\n*\tSys\t'
             text += self._generate_analyzed_pas_info_each(sent, r_s)
             text += '\n'
         text += '\n'

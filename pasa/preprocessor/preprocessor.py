@@ -4,7 +4,7 @@ import theano
 from abc import ABCMeta, abstractmethod
 from sample_factory import BaseSampleFactory, GridSampleFactory, MentionPairSampleFactory
 from ..ling.vocab import Vocab, UNK, PAD
-from ..utils.io_utils import CorpusLoader, say, load_init_emb
+from ..utils.io_utils import NTCLoader, say, load_init_emb
 from ..utils.stats import corpus_statistics, sample_statistics, show_case_dist
 
 
@@ -25,7 +25,7 @@ class Preprocessor(object):
 
     @staticmethod
     def _set_corpus_loader(argv):
-        return CorpusLoader(min_unit='word', data_size=argv.data_size)
+        return NTCLoader(min_unit='word', data_size=argv.data_size)
 
     def set_sample_factory(self, vocab_word, vocab_label):
         factory = self._select_sample_factory()

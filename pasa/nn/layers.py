@@ -69,6 +69,9 @@ class RNNLayers(object):
 
 
 class CrankRNNLayers(RNNLayers):
+    """
+    [Zhou+ 2015]
+    """
 
     def set_forward_func(self, unit):
         if self.unit == 'lstm':
@@ -92,7 +95,10 @@ class CrankRNNLayers(RNNLayers):
         h0 = T.zeros((x.shape[1], x.shape[2]), dtype=theano.config.floatX)
         for layer in self.layers:
             h = layer.forward_all(x, h0)
-            x = (h + x)[::-1]
+            if self.argv.res:
+                x = (h + x)[::-1]
+            else:
+                x = h[::-1]
         if (self.depth % 2) == 1:
             x = x[::-1]
         return x
@@ -102,13 +108,51 @@ class CrankRNNLayers(RNNLayers):
         c0 = T.zeros((x.shape[1], x.shape[2]), dtype=theano.config.floatX)
         for layer in self.layers:
             h, c = layer.forward_all(x, h0, c0)
-            x = (h + x)[::-1]
+            if self.argv.res:
+                x = (h + x)[::-1]
+            else:
+                x = h[::-1]
         if (self.depth % 2) == 1:
             x = x[::-1]
         return x
 
 
 class BiRNNLayers(RNNLayers):
+    """
+    [Graves+ 2013]
+    """
+
+    def set_forward_func(self, unit):
+        return self.gru_forward
+
+    def set_layers(self, unit, depth, n_in, n_h):
+        layers = []
+        layer = GRU
+        for i in xrange(depth):
+            layers.append(layer(n_in=n_in, n_h=n_in))
+            layers.append(layer(n_in=n_in, n_h=n_in))
+        return layers
+
+    def gru_forward(self, x):
+        """
+        :param x: 1D: n_words, 2D: batch, 3D: dim_emb
+        :return: 1D: n_words, 2D: batch, 3D: dim_h
+        """
+        h0_f = T.zeros((x.shape[1], x.shape[2]), dtype=theano.config.floatX)
+        h0_b = T.zeros((x.shape[1], x.shape[2]), dtype=theano.config.floatX)
+        h = x
+        # 1D: n_words, 2D: batch, 3D n_h
+        for i in xrange(self.depth):
+            hf = self.layers[(2*i)].forward_all(h, h0_f)
+            hb = self.layers[(2*i)+1].forward_all(h[::-1], h0_b)[::-1]
+            if self.argv.res:
+                h = hf + hb + h
+            else:
+                h = hf + hb
+        return h
+
+
+class BiRNNConcatLayers(RNNLayers):
 
     def set_forward_func(self, unit):
         return self.gru_forward
@@ -148,7 +192,6 @@ class GridCrossNetwork(RNNLayers):
         layers = []
         for i in xrange(depth):
             layers.extend([layer(n_in=n_h, n_h=n_h) for i in xrange(4)])
-            layers.append(Layer(n_in=n_h * 4, n_h=n_h))
         return layers
 
     def grid_propagate(self, h):
@@ -161,11 +204,15 @@ class GridCrossNetwork(RNNLayers):
         hu0 = T.zeros((h.shape[0], h.shape[2], h.shape[3]), dtype=theano.config.floatX)
         hd0 = T.zeros((h.shape[0], h.shape[2], h.shape[3]), dtype=theano.config.floatX)
         for i in xrange(0, self.depth):
-            hf = self.forward_all(self.layers[i * 5], h, hf0)
-            hb = self.backward_all(self.layers[(i * 5) + 1], h, hb0)
-            hu = self.upward_all(self.layers[(i * 5) + 2], h, hu0)
-            hd = self.downward_all(self.layers[(i * 5) + 3], h, hd0)
-            h = h + self.dot(self.layers[(i * 5) + 4], hf, hb, hu, hd)
+            hf = self.forward_all(self.layers[i*4], h, hf0)
+            hb = self.backward_all(self.layers[(i*4)+1], h, hb0)
+            hu = self.upward_all(self.layers[(i*4)+2], h, hu0)
+            hd = self.downward_all(self.layers[(i*4)+3], h, hd0)
+
+            if self.argv.res and i != self.depth-1:
+                h = self.add(hf, hb, hu, hd) + h
+            else:
+                h = self.add(hf, hb, hu, hd)
         return h
 
     @staticmethod
@@ -207,6 +254,14 @@ class GridCrossNetwork(RNNLayers):
         h = T.concatenate([hf, hb, hu, hd], axis=3)
         return layer.dot(h)
 
+    @staticmethod
+    def add(hf, hb, hu, hd):
+        hf = hf.dimshuffle(1, 2, 0, 3)
+        hb = hb.dimshuffle(1, 2, 0, 3)[::-1]
+        hu = hu.dimshuffle(1, 0, 2, 3)
+        hd = hd.dimshuffle(1, 0, 2, 3)[::-1]
+        return hf + hb + hu + hd
+
 
 class GridObliqueNetwork(RNNLayers):
 
@@ -220,13 +275,7 @@ class GridObliqueNetwork(RNNLayers):
     def select_layer(self):
         argv = self.argv
         if argv.gru_in == 'add':
-            if argv.gru_connect:
-                return ObliqueForwardNetAddConnect
-            else:
-                return ObliqueForwardNetAdd
-        else:
-            if argv.gru_connect:
-                return ObliqueForwardNetConnect
+            return ObliqueForwardNetAdd
         return ObliqueForwardNet
 
     def grid_propagate(self, h):
@@ -239,8 +288,14 @@ class GridObliqueNetwork(RNNLayers):
         h = h.dimshuffle(1, 2, 0, 3)
         for i in xrange(0, self.depth):
             h_tmp = self.layers[i].forward_all(h, h0_r, h0_c)
-            h = h + h_tmp
+
+            if self.argv.res:
+                h = h_tmp + h
+            else:
+                h = h_tmp
+
             h = self.flip(h)
+
         if (self.depth % 2) == 1:
             h = self.flip(h)
         return h.dimshuffle(2, 0, 1, 3)
@@ -304,38 +359,97 @@ class ObliqueForwardNetAdd(object):
         return self.unit.forward_all(x, h)
 
 
-class ObliqueForwardNetConnect(object):
+class GridAttentionNetwork(RNNLayers):
 
-    def __init__(self, n_h):
-        self.unit = GRU(n_in=n_h*2, n_h=n_h)
-        self.params = self.unit.params
+    def set_forward_func(self, unit):
+        return self.grid_propagate
 
-    def forward_all(self, x, h_prev, h0):
-        [h, _], _ = theano.scan(fn=self.forward_row, sequences=[x], outputs_info=[h_prev, h0])
+    def set_layers(self, unit, depth, n_in, n_h):
+        layer = AttentionalGRU
+        return [layer(n_in=n_in, n_h=n_h) for i in xrange(depth)]
+
+    def grid_propagate(self, h):
+        """
+        :param h: 1D: batch, 2D: n_prds, 3D: n_words, 4D: dim_h
+        :return: 1D: batch, 2D: n_prds, 3D: n_words, 4D: dim_h
+        """
+        h0 = T.zeros((h.shape[0], h.shape[1], h.shape[3]), dtype=theano.config.floatX)
+        h = h.dimshuffle(2, 0, 1, 3)
+        for i in xrange(self.depth):
+            h_tmp = self.layers[i].forward_all(h, h0)
+
+            if self.argv.res:
+                h = h_tmp + h
+            else:
+                h = h_tmp
+
+            h = h[::-1]
+
+        if (self.depth % 2) == 1:
+            h = h[::-1]
+        return h.dimshuffle(1, 2, 0, 3)
+
+
+class AttentionalGRU(object):
+
+    def __init__(self, n_in=32, n_h=32, activation=tanh):
+        self.activation = activation
+
+        self.W_xr = theano.shared(sample_weights(n_in, n_h))
+        self.W_hr = theano.shared(sample_weights(n_h, n_h))
+
+        self.W_xz = theano.shared(sample_weights(n_in, n_h))
+        self.W_hz = theano.shared(sample_weights(n_h, n_h))
+
+        self.W_xh = theano.shared(sample_weights(n_in, n_h))
+        self.W_hh = theano.shared(sample_weights(n_h, n_h))
+
+        self.attention = Attention(n_h)
+
+        self.params = [self.W_xr, self.W_hr, self.W_xz, self.W_hz, self.W_xh, self.W_hh] + self.attention.params
+
+    def forward(self, xr_t, xz_t, xh_t, h_tm1):
+        # 1D: batch, 2D: n_prds, 3D: dim_h
+        r_t = sigmoid(xr_t + T.dot(h_tm1, self.W_hr))
+        z_t = sigmoid(xz_t + T.dot(h_tm1, self.W_hz))
+        h_hat_t = self.activation(xh_t + T.dot((r_t * h_tm1), self.W_hh))
+        h_t = (1. - z_t) * h_tm1 + z_t * h_hat_t
+        self.attention.forward(h_t)
+        return h_t
+
+    def forward_all(self, x, h0):
+        xr = T.dot(x, self.W_xr)
+        xz = T.dot(x, self.W_xz)
+        xh = T.dot(x, self.W_xh)
+        h, _ = theano.scan(fn=self.forward, sequences=[xr, xz, xh], outputs_info=[h0])
         return h
 
-    def forward_row(self, x, h_prev, h0):
-        h = self.forward_column(T.concatenate([x, h_prev], axis=2), h0)
-        return h, h[-1]
 
-    def forward_column(self, x, h):
-        return self.unit.forward_all(x, h)
-
-
-class ObliqueForwardNetAddConnect(object):
+class Attention(object):
 
     def __init__(self, n_h):
-        self.unit = GRU(n_in=n_h, n_h=n_h)
-        self.params = self.unit.params
+        self.W1_h = theano.shared(sample_weights(n_h, n_h))
+        self.w    = theano.shared(sample_weights(n_h, ))
+        self.W2_r = theano.shared(sample_weights(n_h, n_h))
+        self.W2_h = theano.shared(sample_weights(n_h, n_h))
+        self.params = [self.W1_h, self.w, self.W2_r, self.W2_h]
 
-    def forward_all(self, x, h_prev, h0):
-        [h, _], _ = theano.scan(fn=self.forward_row, sequences=[x], outputs_info=[h_prev, h0])
-        return h
+    def forward(self, h_t):
+        """
+        :param h_t: 1D: batch_size, 2D n_prds, 3D: n_h
+        :return: 1D: batch_size, 2D: n_prds, 3D: n_h
+        """
 
-    def forward_row(self, x, h_prev, h0):
-        h = self.forward_column(x + h_prev, h0)
-        return h, h[-1]
+        # 1D: batch_size, 2D: n_prds, 3D: n_h
+        M = T.tanh(T.dot(h_t, self.W1_h))
 
-    def forward_column(self, x, h):
-        return self.unit.forward_all(x, h)
+        # 1D: batch_size, 2D: n_prds, 3D: 1
+        alpha = T.nnet.softmax(T.dot(M, self.w))
+        alpha = alpha.dimshuffle((0, 1, 'x'))
+
+        # 1D: batch_size, 2D: n_h
+        r = T.sum(h_t * alpha, axis=1)
+
+#        return T.tanh(T.dot(r, self.W2_r).dimshuffle(0, 'x', 1) + T.dot(h_t, self.W2_h))
+        return T.tanh(T.dot(r, self.W2_r)).dimshuffle(0, 'x', 1) + T.dot(h_t, self.W2_h)
 

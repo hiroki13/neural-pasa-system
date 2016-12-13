@@ -3,12 +3,14 @@ import os
 import shutil
 import gzip
 import cPickle
+from abc import ABCMeta, abstractmethod
 
 import numpy as np
 import theano
 
-from ..ling.word import Word
 from ..ling.vocab import Vocab, PAD, UNK
+from ..ling.word import Word, ConllWord
+from ..ling.sent import Sentence
 
 
 def say(s, stream=sys.stdout):
@@ -17,10 +19,18 @@ def say(s, stream=sys.stdout):
 
 
 class CorpusLoader(object):
+    __metaclass__ = ABCMeta
 
     def __init__(self, min_unit, data_size):
         self.min_unit = min_unit
         self.data_size = data_size
+
+    @abstractmethod
+    def load_corpus(self, path):
+        raise NotImplementedError
+
+
+class NTCLoader(CorpusLoader):
 
     def load_corpus(self, path):
         if path is None:
@@ -41,8 +51,8 @@ class CorpusLoader(object):
             for line in f:
                 elem = line.rstrip().split()
 
-                if line.startswith(BOD):  # Doc starts
-                    doc_id = self.get_doc_id(elem)
+                if line.startswith(BOD):
+                    doc_id = self._get_doc_id(elem)
 
                     if prev_doc_id and prev_doc_id != doc_id:
                         prev_doc_id = doc_id
@@ -50,22 +60,19 @@ class CorpusLoader(object):
                         doc = []
                     elif prev_doc_id is None:
                         prev_doc_id = doc_id
-
                 elif line.startswith(BOC):
-                    chunk_index, chunk_head = self.get_chunk_info(elem)
-
+                    chunk_index, chunk_head = self._get_chunk_info(elem)
                 elif line.startswith(EOS):
                     for w in sent:
                         w.set_cases(sent, doc)
                     doc.append(sent)
                     sent = []
-
                 else:
-                    word = self.get_word(w_index=len(sent),
-                                         chunk_index=chunk_index,
-                                         chunk_head=chunk_head,
-                                         sent_index=len(doc),
-                                         elem=elem)
+                    word = self._get_word(w_index=len(sent),
+                                          chunk_index=chunk_index,
+                                          chunk_head=chunk_head,
+                                          sent_index=len(doc),
+                                          elem=elem)
                     sent.append(word)
 
                 if len(corpus) == self.data_size:
@@ -77,20 +84,44 @@ class CorpusLoader(object):
         return corpus
 
     @staticmethod
-    def get_chunk_info(elem):
-        return int(elem[1]), int(elem[2][:-1])
-
-    @staticmethod
-    def get_doc_id(elem):
+    def _get_doc_id(elem):
         return elem[1].split(':')[1].split('-')[0]
 
     @staticmethod
-    def get_word(w_index, chunk_index, chunk_head, sent_index, elem):
+    def _get_chunk_info(elem):
+        return int(elem[1]), int(elem[2][:-1])
+
+    @staticmethod
+    def _get_word(w_index, chunk_index, chunk_head, sent_index, elem):
         w = Word(w_index, elem)
         w.sent_index = sent_index
         w.chunk_index = chunk_index
         w.chunk_head = chunk_head
         return w
+
+
+class CONLLLoader(CorpusLoader):
+
+    def load_corpus(self, path):
+        PRD = '#'
+        RESULT = '*'
+        corpus = []
+        with open(path) as f:
+            sent = Sentence()
+            for line in f:
+                line = line.rstrip()
+                elem = line.split('\t')
+
+                if len(line) == 0:
+                    corpus.append(sent)
+                    sent = Sentence()
+                elif elem[0] == PRD:
+                    sent.set_prd(elem)
+                elif elem[0] == RESULT:
+                    sent.set_args(elem)
+                else:
+                    sent.words.append(ConllWord(elem))
+        return corpus
 
 
 def load_init_emb(fn, dim_emb):

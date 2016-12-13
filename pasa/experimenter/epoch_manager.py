@@ -18,7 +18,10 @@ class EpochManager(object):
             say('\nEpoch: %d\n' % (epoch + 1))
             print '  TRAIN\n\t',
 
-            self._train_one_epoch(model_api, train_samples)
+            dropout_p = np.float32(argv.dropout).astype(theano.config.floatX)
+            model_api.model.dropout.set_value(dropout_p)
+
+            model_api.train_one_epoch(train_samples)
             dev_results, update, trainable_emb = self._validate(epoch, model_api, dev_samples, untrainable_emb)
             test_results = self._test(epoch, model_api, test_samples, update)
 
@@ -32,12 +35,6 @@ class EpochManager(object):
                 model_api.model.emb_layer.word_emb.set_value(trainable_emb)
 
             self._show_results()
-
-    def _train_one_epoch(self, model_api, samples):
-        argv = self.argv
-        dropout_p = np.float32(argv.dropout).astype(theano.config.floatX)
-        model_api.model.dropout.set_value(dropout_p)
-        model_api.train_one_epoch(samples)
 
     def _validate(self, epoch, model_api, samples, untrainable_emb=None):
         results = None

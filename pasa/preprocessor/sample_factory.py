@@ -11,7 +11,6 @@ class SampleFactory(object):
         self.vocab_word = vocab_word
         self.vocab_label = vocab_label
         self.batch_size = argv.batch_size
-        self.window = argv.window
 
     @abstractmethod
     def create_samples(self, corpus):
@@ -38,7 +37,7 @@ class BaseSampleFactory(SampleFactory):
         return [self.create_sample(sent=sent) for sent in corpus]
 
     def create_sample(self, sent):
-        return BaseSample(sent, self.window, self.vocab_word, self.vocab_label)
+        return BaseSample(sent, self.argv.phi_type, self.argv.window, self.vocab_word, self.vocab_label)
 
     def create_batch(self, samples):
         return BaseBatch(self.batch_size, samples)
@@ -62,7 +61,7 @@ class MentionPairSampleFactory(SampleFactory):
         return [self.create_sample(doc=doc) for doc in corpus]
 
     def create_sample(self, doc):
-        return MentionPairSample(doc, self.window, self.vocab_word, self.vocab_label)
+        return MentionPairSample(doc, self.argv.phi_type, self.argv.window, self.vocab_word, self.vocab_label)
 
     def create_batch(self, samples):
         return MentionPairBatch(self.batch_size, samples)
