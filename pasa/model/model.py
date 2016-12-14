@@ -4,7 +4,7 @@ import theano.tensor as T
 
 from ..utils.io_utils import say
 from ..nn.layers import Layer, EmbeddingLayer, BiRNNLayers, CrankRNNLayers, GridObliqueNetwork, GridAttentionNetwork
-from ..nn.nn_utils import L2_sqr, sigmoid, binary_cross_entropy
+from ..nn.nn_utils import L2_sqr
 from ..nn.optimizers import ada_grad, ada_delta, adam, sgd
 from ..nn.seq_label_model import SoftmaxLayer, MEMMLayer, CRFLayer
 
@@ -122,8 +122,7 @@ class Model(object):
         :return: 1D: batch, 2D: n_words, 3D: dim_in (dim_emb * (5 + window + 1))
         """
         x_w = self.emb_layers[0].lookup(x_w).reshape((x_w.shape[0], x_w.shape[1], -1))
-#        x_p = self.emb_layers[1].lookup(x_p)
-        x_p = self.emb_layers[1].lookup(x_p).reshape((x_p.shape[0], x_p.shape[1], -1))
+        x_p = self.emb_layers[1].lookup(x_p)
         x = T.concatenate([x_w, x_p], axis=2)
         return self.emb_layers[2].dot(x).dimshuffle(1, 0, 2)
 
@@ -216,8 +215,7 @@ class GridModel(Model):
         :return: 1D: batch, 2D: n_prds, 3D: n_words, 4D: dim_h
         """
         x_w = self.emb_layers[0].lookup(x_w).reshape((x_w.shape[0], x_w.shape[1], x_w.shape[2], -1))
-#        x_p = self.emb_layers[1].lookup(x_p)
-        x_p = self.emb_layers[1].lookup(x_p).reshape((x_p.shape[0], x_p.shape[1], x_p.shape[2], -1))
+        x_p = self.emb_layers[1].lookup(x_p)
         x = T.concatenate([x_w, x_p], axis=3)
         return self.emb_layers[2].dot(x)
 
@@ -242,74 +240,3 @@ class GridModel(Model):
         nll = - T.mean(p_y)
         cost = nll + reg * L2_sqr(self.params) / 2.
         return nll, cost
-
-
-class MentionPairModel(Model):
-
-    def compile(self, variables):
-        argv = self.argv
-        # x_a: 1D: batch, 2D: window; word id
-        # y: 1D: batch; elem=label id
-        x_a, y = variables
-        self.inputs = [x_a, y]
-        self.x = [x_a]
-
-        self.dropout = theano.shared(np.float32(argv.dropout).astype(theano.config.floatX))
-        self.set_layers(self.emb)
-        self.set_params()
-
-        x = self.emb_layer_forward(x_a)
-        h = self.hidden_layer_forward(x)
-        h = self.output_layer_forward(h)
-
-        self.y_pred = (h > 0.5)
-        self.y_gold = y
-        self.y_prob = h
-
-        self.nll, self.cost = self.objective_f(h, reg=argv.reg)
-        self.update = self.optimize(cost=self.cost, opt=argv.opt, lr=argv.lr)
-
-    def set_layers(self, init_emb):
-        argv = self.argv
-        dim_emb = argv.dim_emb if init_emb is None else len(init_emb[0])
-        dim_in = dim_emb * 2
-        dim_h = argv.dim_hidden
-
-        self.emb_layers.append(EmbeddingLayer(init_emb=init_emb, n_vocab=self.n_vocab, dim_emb=dim_emb,
-                                              fix=argv.fix, pad=1))
-        self.emb_layers.append(Layer(n_in=dim_in, n_h=dim_h))
-
-        self.hidden_layers = Layer(n_in=dim_h, n_h=dim_h)
-        self.output_layer = Layer(n_in=dim_h, n_h=1)
-
-        self.layers.extend(self.emb_layers)
-        self.layers.append(self.hidden_layers)
-        self.layers.append(self.output_layer)
-
-    def emb_layer_forward(self, x_w):
-        """
-        :param x_w: 1D: batch, 2D: 2; word id
-        :return: 1D: batch, 2D: dim_h
-        """
-        x = self.emb_layers[0].lookup(x_w).reshape((x_w.shape[0], -1))
-        return self.emb_layers[1].dot(x)
-
-    def hidden_layer_forward(self, x):
-        """
-        :param x: 1D: batch, 2D: dim_h
-        :return: 1D: batch, 2D: dim_h
-        """
-        return self.hidden_layers.dot(x)
-
-    def output_layer_forward(self, x):
-        """
-        :param x: 1D: batch, 2D: dim_h
-        :return: 1D: batch; probability
-        """
-        return sigmoid(self.output_layer.dot(x).flatten())
-
-    def objective_f(self, h, reg):
-        nll = binary_cross_entropy(self.y_gold, h)
-        cost = nll + reg * L2_sqr(self.params) / 2.
-        return nll, cost
-

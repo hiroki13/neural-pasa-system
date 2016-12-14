@@ -1,6 +1,6 @@
 from abc import ABCMeta, abstractmethod
-from sample import BaseSample, MentionPairSample
-from batch import BaseBatch, GridBatch, MentionPairBatch
+from sample import BaseSample
+from batch import BaseBatch, GridBatch
 
 
 class SampleFactory(object):
@@ -47,21 +47,3 @@ class GridSampleFactory(BaseSampleFactory):
 
     def create_batch(self, samples):
         return GridBatch(self.batch_size, samples)
-
-
-class MentionPairSampleFactory(SampleFactory):
-
-    def create_samples(self, corpus):
-        """
-        :param corpus: 1D: n_docs, 2D: n_sents, 3D: n_words; elem=Word
-        :return: samples: 1D: n_samples; Sample
-        """
-        if corpus is None:
-            return None
-        return [self.create_sample(doc=doc) for doc in corpus]
-
-    def create_sample(self, doc):
-        return MentionPairSample(doc, self.argv.phi_type, self.argv.window, self.vocab_word, self.vocab_label)
-
-    def create_batch(self, samples):
-        return MentionPairBatch(self.batch_size, samples)

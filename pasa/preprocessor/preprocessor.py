@@ -2,7 +2,7 @@ import numpy as np
 import theano
 
 from abc import ABCMeta, abstractmethod
-from sample_factory import BaseSampleFactory, GridSampleFactory, MentionPairSampleFactory
+from sample_factory import BaseSampleFactory, GridSampleFactory
 from ..ling.vocab import Vocab, UNK, PAD
 from ..utils.io_utils import NTCLoader, say, load_init_emb
 from ..utils.stats import corpus_statistics, sample_statistics, show_case_dist
@@ -34,9 +34,7 @@ class Preprocessor(object):
                                       vocab_label=vocab_label)
 
     def _select_sample_factory(self):
-        if self.argv.model == 'inter':
-            return MentionPairSampleFactory
-        elif self.argv.model == 'grid':
+        if self.argv.model == 'grid':
             return GridSampleFactory
         return BaseSampleFactory
 
@@ -161,16 +159,3 @@ class BasePreprocessor(Preprocessor):
         if corpus:
             return [sample for doc in corpus for sample in doc]
         return None
-
-
-class InterPreprocessor(Preprocessor):
-
-    def _format_corpus(self, corpus):
-        if corpus:
-            return corpus
-        return None
-
-    @staticmethod
-    def show_sample_stats(sample_set, vocab_label):
-        pass
-

@@ -129,12 +129,12 @@ class Word(object):
                     self.case_types[case_label] = case_type
 
     def _set_inter_cases(self, doc):
-        for i, prev_sent in enumerate(doc):
+        for sent_index, prev_sent in enumerate(doc):
             for word in prev_sent:
                 for case_label, arg_id in enumerate(self.case_arg_ids):
                     if word.id == arg_id > -1 and self.case_types[case_label] < 0:
                         self.case_types[case_label] = INTER_ZERO
-                        self.inter_case_arg_index[case_label].append((i, word.index))
+                        self.inter_case_arg_index[case_label].append((sent_index, word.index))
 
     def _set_exo_cases(self):
         for case_label, a_id in enumerate(self.case_arg_ids):

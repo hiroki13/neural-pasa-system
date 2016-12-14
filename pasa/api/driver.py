@@ -44,16 +44,12 @@ class Driver(object):
 
     @staticmethod
     def _select_preprocessor(argv):
-        if argv.model == 'inter':
-            return InterPreprocessor
         return BasePreprocessor
 
     @staticmethod
     def _select_model_api(argv):
         if argv.model == 'grid':
             return GridModelAPI
-        elif argv.model == 'inter':
-            return MentionPairModelAPI
         return BaseModelAPI
 
     @staticmethod
