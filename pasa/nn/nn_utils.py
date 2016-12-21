@@ -90,6 +90,10 @@ def binary_cross_entropy(y, y_p):
     return - (T.sum(y * T.log(y_p)) + T.sum((1 - y) * T.log(1. - y_p)))
 
 
+def cross_entropy(coding_dist, true_dist):
+    return T.nnet.categorical_crossentropy(coding_dist, true_dist)
+
+
 def hinge_loss(pos_scores, neg_scores):
     """
     :param pos_scores: 1D: batch, 2D: n_labels
