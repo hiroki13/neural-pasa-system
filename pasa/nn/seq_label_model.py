@@ -204,8 +204,8 @@ class SoftmaxLayer(object):
         h = T.dot(x, self.W)
         # 1D: n_words * batch, 2D: n_labels
         h_reshaped = h.reshape((h.shape[0] * h.shape[1], h.shape[2]))
-#        return T.log(T.nnet.softmax(h_reshaped).reshape((h.shape[0], h.shape[1], -1)))
-        return T.nnet.softmax(h_reshaped).reshape((h.shape[0], h.shape[1], -1))
+        return T.log(T.nnet.softmax(h_reshaped).reshape((h.shape[0], h.shape[1], -1)))
+#        return T.nnet.softmax(h_reshaped).reshape((h.shape[0], h.shape[1], -1))
 
     @staticmethod
     def get_y_prob(h, y):

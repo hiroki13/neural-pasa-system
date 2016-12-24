@@ -70,8 +70,8 @@ class Model(object):
         # Outputs #
         ###########
         self.y_gold = y
-#        self.y_pred = self.output_layer.decode(o)
-        self.y_pred = self.output_layer.decode(T.log(o))
+        self.y_pred = self.output_layer.decode(o)
+#        self.y_pred = self.output_layer.decode(T.log(o))
         self.y_prob = o.dimshuffle(1, 0, 2)
         self.hidden_reps = h.dimshuffle(1, 0, 2)
 
@@ -142,10 +142,10 @@ class Model(object):
         return self.layers[-1].forward(x)
 
     def objective_f(self, o, reg):
-#        p_y = self.output_layer.get_y_prob(o, self.y_gold.dimshuffle((1, 0)))
-        p_y = cross_entropy(o.dimshuffle(1, 0, 2).reshape((o.shape[0] * o.shape[1], -1)), self.y_gold.flatten())
-#        nll = - T.mean(p_y)
-        nll = T.mean(p_y)
+        p_y = self.output_layer.get_y_prob(o, self.y_gold.dimshuffle((1, 0)))
+#        p_y = cross_entropy(o.dimshuffle(1, 0, 2).reshape((o.shape[0] * o.shape[1], -1)), self.y_gold.flatten())
+        nll = - T.mean(p_y)
+#        nll = T.mean(p_y)
 #        nll = T.mean(T.sum(p_y.reshape((o.shape[1], o.shape[0])), axis=1))
         cost = nll + reg * L2_sqr(self.params) / 2.
         return nll, cost
@@ -240,10 +240,11 @@ class GridModel(Model):
         return self.layers[-1].forward(x)
 
     def objective_f(self, o, reg):
-#        p_y = self.output_layer.get_y_prob(o, self.y_gold.dimshuffle((1, 0)))
-        p_y = cross_entropy(o.dimshuffle(1, 0, 2).reshape((o.shape[0] * o.shape[1], -1)), self.y_gold.flatten())
-#        nll = - T.mean(p_y)
+        p_y = self.output_layer.get_y_prob(o, self.y_gold.dimshuffle((1, 0)))
+#        p_y = T.sum(p_y.reshape((self.x[0].shape[0], self.x[0].shape[1])), axis=1)
+#        p_y = cross_entropy(o.dimshuffle(1, 0, 2).reshape((o.shape[0] * o.shape[1], -1)), self.y_gold.flatten())
+        nll = - T.mean(p_y)
 #        nll = T.mean(T.sum(p_y.reshape((o.shape[1], o.shape[0])), axis=1))
-        nll = T.mean(p_y)
+#        nll = T.mean(p_y)
         cost = nll + reg * L2_sqr(self.params) / 2.
         return nll, cost

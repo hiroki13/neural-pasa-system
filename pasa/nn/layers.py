@@ -277,6 +277,7 @@ class GridObliqueNetwork(RNNLayers):
         if argv.gru_in == 'add':
             return ObliqueForwardNetAdd
         return ObliqueForwardNet
+#        return ObliqueBiasNet
 
     def grid_propagate(self, h):
         """
@@ -340,6 +341,74 @@ class ObliqueForwardNet(object):
         :return: 1D: n_words, 2D: batch, 3D: dim_h
         """
         return self.unit.forward_all(x, h)
+
+
+class ObliqueBiasNet(object):
+
+    def __init__(self, n_h):
+        self.unit = BiasGRU(n_in=n_h, n_h=n_h)
+        self.params = self.unit.params
+
+    def forward_all(self, x, h_prev, h0):
+        """
+        :param x: 1D: n_prds, 2D: n_words, 3D: batch, dim_h
+        :param h_prev: 1D: n_words, 2D: batch, 3D: dim_h
+        :param h0: 1D: batch, 2D: dim_h
+        :return: 1D: n_prds, 2D: n_words, 3D: batch, 3D: dim_h
+        """
+        h, _ = theano.scan(fn=self.forward_row, sequences=[x], outputs_info=[h_prev], non_sequences=[h0])
+        return h
+
+    def forward_row(self, x, h_prev, h0):
+        """
+        :param x: 1D: n_words, 2D: batch, 3D: dim_h
+        :param h_prev: 1D: n_words, 2D: batch, 3D: dim_h
+        :param h0: 1D: batch, 2D: dim_h
+        :return: 1D: n_words, 2D: batch, 3D: dim_h
+        """
+        return self.forward_column(x, h_prev, h0)
+
+    def forward_column(self, x, h_prev, h):
+        """
+        :param x: 1D: n_words, 2D: batch, 3D: dim_h
+        :param h: 1D: n_words, 2D: batch, 3D: dim_h
+        :return: 1D: n_words, 2D: batch, 3D: dim_h
+        """
+        return self.unit.forward_all(x, h_prev, h)
+
+
+class BiasGRU(object):
+
+    def __init__(self, n_in=32, n_h=32, activation=tanh):
+        self.activation = activation
+
+        self.W_xr = theano.shared(sample_weights(n_in, n_h))
+        self.W_hr = theano.shared(sample_weights(n_h, n_h))
+
+        self.W_xz = theano.shared(sample_weights(n_in, n_h))
+        self.W_hz = theano.shared(sample_weights(n_h, n_h))
+
+        self.W_xh = theano.shared(sample_weights(n_in, n_h))
+        self.W_hh = theano.shared(sample_weights(n_h, n_h))
+
+        self.W_hp = theano.shared(sample_weights(n_in, n_h))
+
+        self.params = [self.W_xr, self.W_hr, self.W_xz, self.W_hz, self.W_xh, self.W_hh, self.W_hp]
+
+    def forward(self, xr_t, xz_t, xh_t, hp, h_tm1):
+        h_tm1 = h_tm1 + T.dot(hp, self.W_hp)
+        r_t = sigmoid(xr_t + T.dot(h_tm1, self.W_hr))
+        z_t = sigmoid(xz_t + T.dot(h_tm1, self.W_hz))
+        h_hat_t = self.activation(xh_t + T.dot((r_t * h_tm1), self.W_hh))
+        h_t = (1. - z_t) * h_tm1 + z_t * h_hat_t
+        return h_t
+
+    def forward_all(self, x, hp, h0):
+        xr = T.dot(x, self.W_xr)
+        xz = T.dot(x, self.W_xz)
+        xh = T.dot(x, self.W_xh)
+        h, _ = theano.scan(fn=self.forward, sequences=[xr, xz, xh, hp], outputs_info=[h0])
+        return h
 
 
 class ObliqueForwardNetAdd(object):
