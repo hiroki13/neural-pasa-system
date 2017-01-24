@@ -1,10 +1,8 @@
-import theano
 import numpy as np
-import random
+import theano
 
 theano.config.floatX = 'float32'
 np.random.seed(0)
-random.seed(0)
 
 
 if __name__ == '__main__':
@@ -40,7 +38,7 @@ if __name__ == '__main__':
     # Model #
     #########
     parser.add_argument('--model', type=str, default='base', help='base/grid')
-    parser.add_argument('--save', type=int, default=1, help='save model')
+    parser.add_argument('--save', type=int, default=0, help='save model')
     parser.add_argument('--result', type=bool, default=False, help='output results')
 
     ###############
@@ -48,7 +46,6 @@ if __name__ == '__main__':
     ###############
     parser.add_argument('--data_size', type=int, default=100000)
     parser.add_argument('--vocab_cut_off', type=int, default=0)
-    parser.add_argument('--sec', type=int, default=None, help='The target section of the jack knife')
 
     ########################
     # Neural Architectures #
@@ -56,14 +53,10 @@ if __name__ == '__main__':
     parser.add_argument('--unit', default='gru', help='unit')
     parser.add_argument('--fix', type=int, default=0, help='fix or not init embeddings')
     parser.add_argument('--layers',  type=int, default=1, help='number of layers')
-    parser.add_argument('--window', type=int, default=5, help='window size for convolution')
+    parser.add_argument('--window', type=int, default=1, help='window size for convolution')
     parser.add_argument('--dim_emb',    type=int, default=32, help='dimension of word embeddings')
     parser.add_argument('--dim_posit',  type=int, default=5, help='dimension of position embeddings')
     parser.add_argument('--dim_hidden', type=int, default=32, help='dimension of hidden layer')
-    parser.add_argument('--dropout', type=float, default=0.0, help='dropout prob')
-
-    parser.add_argument('--hidden_layer',  type=int, default=0, help='crank/bi-rnn')
-    parser.add_argument('--output_layer',  type=int, default=0, help='softmax/memm/crf')
 
     #######################
     # Training Parameters #
@@ -75,11 +68,7 @@ if __name__ == '__main__':
     parser.add_argument('--lr', type=float, default=0.0075, help='learning rate')
     parser.add_argument('--reg', type=float, default=0.0001, help='learning rate')
     parser.add_argument('--init_emb', default=None, help='Initial embedding to be loaded')
-    parser.add_argument('--n_best', type=int, default=10, help='How many best lists are created')
-
     parser.add_argument('--res', type=int, default=1, help='residual connections')
-    parser.add_argument('--gru_in', default=None, help='gru inputs to the grid network')
-    parser.add_argument('--gru_connect', default=0, help='gru connections of the grid network')
 
     argv = parser.parse_args()
     print

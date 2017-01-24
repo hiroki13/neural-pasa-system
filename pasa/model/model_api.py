@@ -6,9 +6,8 @@ import theano
 import theano.tensor as T
 
 from abc import ABCMeta, abstractmethod
-from io_manager import IOManager
-from model import Model, GridModel
-from result import Results
+from model_io import IOManager
+from model import BaseModel, GridModel
 from ..decoder.decoder import Decoder
 from ..experimenter.evaluator import SampleEval, BatchEval
 from ..utils.io_utils import say
@@ -107,7 +106,7 @@ class ModelAPI(object):
         train_eval.show_results()
 
     def predict_one_epoch(self, samples):
-        results = Results(self.argv)
+        results = []
         start = time.time()
 
         for index, sample in enumerate(samples):
@@ -116,13 +115,12 @@ class ModelAPI(object):
                 sys.stdout.flush()
 
             if sample.n_prds == 0:
-                model_outputs = []
-                decoder_outputs = []
+                outputs = []
             else:
                 model_outputs = self.predict(*self._format_inputs(sample))
-                decoder_outputs = self.decoder.decode(output_prob=model_outputs[0], prd_indices=sample.prd_indices)
+                outputs = self.decoder.decode(output_prob=model_outputs[0], prd_indices=sample.prd_indices)
 
-            results.add([sample, model_outputs, decoder_outputs])
+            results.append(outputs)
 
         print '\tTime: %f' % (time.time() - start)
         return results
@@ -154,10 +152,10 @@ class ModelAPI(object):
 class BaseModelAPI(ModelAPI):
 
     def _set_model(self):
-        self.model = Model(argv=self.argv,
-                           emb=self.emb,
-                           n_vocab=self.vocab_word.size(),
-                           n_labels=self.vocab_label.size())
+        self.model = BaseModel(argv=self.argv,
+                               emb=self.emb,
+                               n_vocab=self.vocab_word.size(),
+                               n_labels=self.vocab_label.size())
         self.model.compile(self._get_input_tensor_variables())
 
     def _get_input_tensor_variables(self):

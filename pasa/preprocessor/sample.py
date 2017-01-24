@@ -8,7 +8,7 @@ from ..ling.vocab import UNK, NA, GA, O, NI, PRD, GA_LABEL, O_LABEL, NI_LABEL
 class Sample(object):
     __metaclass__ = ABCMeta
 
-    def __init__(self, sent, phi_type, window, vocab_word, vocab_label):
+    def __init__(self, sent, window, vocab_word, vocab_label):
         """
         sent: 1D: n_words; Word()
         word_ids: 1D: n_words; word id
@@ -24,7 +24,7 @@ class Sample(object):
         self.word_ids = self._set_word_ids(sent, vocab_word)
         self.label_ids = self._set_label_ids(sent, vocab_label)
 
-        self.x = self._set_x(phi_type=phi_type, window=window)
+        self.x = self._set_x(window=window)
         self.y = self._set_y()
 
     @abstractmethod
@@ -40,7 +40,7 @@ class Sample(object):
         raise NotImplementedError
 
     @abstractmethod
-    def _set_x(self, phi_type, window):
+    def _set_x(self, window):
         raise NotImplementedError
 
     @abstractmethod
@@ -92,9 +92,9 @@ class BaseSample(Sample):
                     exit()
         return label_seq
 
-    def _set_x(self, phi_type, window):
+    def _set_x(self, window):
         x_w = self._get_word_phi(window)
-        x_p = self._get_posit_phi(phi_type, window)
+        x_p = self._get_posit_phi()
         return [x_w, x_p]
 
     def _set_y(self):
@@ -131,21 +131,10 @@ class BaseSample(Sample):
         assert len(phi) == len(self.prd_indices)
         return self._numpize(phi)
 
-    def _get_posit_phi(self, phi_type, window):
-        if phi_type == 'mark':
-            phi = self._create_mark_phi(window)
-        else:
-            phi = self._create_rel_phi()
+    def _get_posit_phi(self):
+        phi = self._create_rel_phi()
         assert len(phi) == len(self.prd_indices)
         return self._numpize(phi)
-
-    def _create_mark_phi(self, window):
-        phi = []
-        slide = window / 2
-        for p_index in self.prd_indices:
-            tmp_phi = [self._get_mark(p_index, a_index, slide) for a_index in xrange(self.n_words)]
-            phi.append(tmp_phi)
-        return phi
 
     def _create_rel_phi(self):
         phi = []
@@ -153,12 +142,6 @@ class BaseSample(Sample):
             tmp_phi = [self._get_relative_posit(p_index, a_index) for a_index in xrange(self.n_words)]
             phi.append(tmp_phi)
         return phi
-
-    @staticmethod
-    def _get_mark(prd_index, arg_index, slide):
-        if prd_index - slide <= arg_index <= prd_index + slide:
-            return 0
-        return 1
 
     @staticmethod
     def _get_relative_posit(w1, w2):

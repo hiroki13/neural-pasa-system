@@ -1,5 +1,4 @@
 import numpy as np
-import theano
 
 from ..utils.io_utils import say
 
@@ -18,9 +17,6 @@ class EpochManager(object):
             say('\nEpoch: %d\n' % (epoch + 1))
             print '  TRAIN\n\t',
 
-            dropout_p = np.float32(argv.dropout).astype(theano.config.floatX)
-            model_api.model.dropout.set_value(dropout_p)
-
             model_api.train_one_epoch(train_samples)
             dev_results, update, trainable_emb = self._validate(epoch, model_api, dev_samples, untrainable_emb)
             test_results = self._test(epoch, model_api, test_samples, update)
@@ -28,7 +24,7 @@ class EpochManager(object):
             if argv.save and update:
                 model_api.save_model()
                 if test_results:
-                    model_api.save_pas_results(results=test_results.decoder_outputs, samples=test_samples)
+                    model_api.save_pas_results(results=test_results, samples=test_samples)
                     model_api.save_outputs(results=test_results)
 
             if trainable_emb:
@@ -50,7 +46,7 @@ class EpochManager(object):
             print '\n  DEV\n\t',
             # results: (sample, result, decoded_result)
             results = model_api.predict_one_epoch(samples)
-            f1 = model_api.eval_one_epoch(batch_y_hat=results.decoder_outputs, samples=samples)
+            f1 = model_api.eval_one_epoch(batch_y_hat=results, samples=samples)
             if self.best_f1 < f1:
                 self.best_f1 = f1
                 self.f1_history[epoch+1] = [f1]
@@ -64,7 +60,7 @@ class EpochManager(object):
         if samples:
             print '\n  TEST\n\t',
             results = model_api.predict_one_epoch(samples)
-            f1 = model_api.eval_one_epoch(batch_y_hat=results.decoder_outputs, samples=samples)
+            f1 = model_api.eval_one_epoch(batch_y_hat=results, samples=samples)
             if update:
                 if epoch + 1 in self.f1_history:
                     self.f1_history[epoch+1].append(f1)

@@ -37,7 +37,7 @@ class BaseSampleFactory(SampleFactory):
         return [self.create_sample(sent=sent) for sent in corpus]
 
     def create_sample(self, sent):
-        return BaseSample(sent, self.argv.phi_type, self.argv.window, self.vocab_word, self.vocab_label)
+        return BaseSample(sent, self.argv.window, self.vocab_word, self.vocab_label)
 
     def create_batch(self, samples):
         return BaseBatch(self.batch_size, samples)

@@ -1,5 +1,5 @@
+from numpy.random import shuffle
 from abc import ABCMeta, abstractmethod
-from random import shuffle
 
 
 class Batch(object):

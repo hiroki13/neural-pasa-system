@@ -10,13 +10,13 @@ def main():
 
 
 def test_grid_forward():
-    from ..nn.layers import GridObliqueNetwork
+    from ..nn.layers import GridNetwork
 
     batch = 1
     n_prds = 2
     n_words = 3
     dim_h = 4
-    grid_net = GridObliqueNetwork(unit='gru', depth=1, n_in=dim_h, n_h=dim_h)
+    grid_net = GridNetwork(unit='gru', depth=1, n_in=dim_h, n_h=dim_h)
 
     x = T.ftensor4()
     h = T.zeros(x.shape, dtype=theano.config.floatX)
@@ -30,13 +30,13 @@ def test_grid_forward():
 
 
 def test_grid_propagate():
-    from ..nn.layers import GridObliqueNetwork
+    from ..nn.layers import GridNetwork
 
     batch = 2
     n_prds = 2
     n_words = 3
     dim_h = 4
-    grid_net = GridObliqueNetwork(unit='gru', depth=1, n_in=dim_h, n_h=dim_h)
+    grid_net = GridNetwork(unit='gru', depth=1, n_in=dim_h, n_h=dim_h)
 
     x = T.ftensor4()
     h = grid_net.forward(x)
@@ -48,11 +48,11 @@ def test_grid_propagate():
 
 
 def test_flip():
-    from ..nn.layers import GridObliqueNetwork
+    from ..nn.layers import GridNetwork
 
     x = T.fmatrix()
     dim_h = 4
-    g_net = GridObliqueNetwork(unit='gru', depth=1, n_in=dim_h, n_h=dim_h)
+    g_net = GridNetwork(unit='gru', depth=1, n_in=dim_h, n_h=dim_h)
     h = g_net.flip(x)
     f = theano.function(inputs=[x], outputs=h)
 

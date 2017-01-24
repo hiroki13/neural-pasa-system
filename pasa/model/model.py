@@ -1,15 +1,14 @@
-import numpy as np
-import theano
 import theano.tensor as T
 
+from abc import ABCMeta, abstractmethod
 from ..utils.io_utils import say
-from ..nn.layers import Layer, EmbeddingLayer, BiRNNLayers, CrankRNNLayers, GridObliqueNetwork, GridAttentionNetwork
-from ..nn.nn_utils import L2_sqr, cross_entropy
+from ..nn.layers import Layer, EmbeddingLayer, SoftmaxLayer, StackedBiRNNLayers, GridNetwork
+from ..nn.nn_utils import L2_sqr
 from ..nn.optimizers import ada_grad, ada_delta, adam, sgd
-from ..nn.seq_label_model import SoftmaxLayer, MEMMLayer, CRFLayer
 
 
 class Model(object):
+    __metaclass__ = ABCMeta
 
     def __init__(self, argv, emb, n_vocab, n_labels):
 
@@ -17,7 +16,6 @@ class Model(object):
         self.emb = emb
         self.n_vocab = n_vocab
         self.n_labels = n_labels
-        self.dropout = None
 
         ###################
         # Input variables #
@@ -31,7 +29,6 @@ class Model(object):
         self.y_prob = None
         self.y_gold = None
         self.y_pred = None
-        self.hidden_reps = None
         self.nll = None
         self.cost = None
 
@@ -45,6 +42,38 @@ class Model(object):
         self.params = []
         self.update = None
 
+    @abstractmethod
+    def compile(self, variables):
+        raise NotImplementedError
+
+    @abstractmethod
+    def set_layers(self):
+        raise NotImplementedError
+
+    def set_params(self):
+        for l in self.layers:
+            self.params.extend(l.params)
+        say("No. of parameters: {}\n".format(sum(len(x.get_value(borrow=True).ravel()) for x in self.params)))
+
+    def optimize(self, cost, opt, lr):
+        params = self.params
+        if opt == 'adagrad':
+            return ada_grad(cost=cost, params=params, lr=lr)
+        elif opt == 'ada_delta':
+            return ada_delta(cost=cost, params=params)
+        elif opt == 'adam':
+            return adam(cost=cost, params=params)
+        return sgd(cost=cost, params=params, lr=lr)
+
+    def objective_f(self, o, reg):
+        p_y = self.output_layer.get_y_prob(o, self.y_gold.dimshuffle((1, 0)))
+        nll = - T.mean(p_y)
+        cost = nll + reg * L2_sqr(self.params) / 2.
+        return nll, cost
+
+
+class BaseModel(Model):
+
     def compile(self, variables):
         argv = self.argv
         x_w, x_p, y = variables
@@ -55,8 +84,7 @@ class Model(object):
         self.inputs = [x_w, x_p, y]
         self.x = [x_w, x_p]
 
-        self.dropout = theano.shared(np.float32(argv.dropout).astype(theano.config.floatX))
-        self.set_layers(self.emb)
+        self.set_layers()
         self.set_params()
 
         ############
@@ -71,9 +99,7 @@ class Model(object):
         ###########
         self.y_gold = y
         self.y_pred = self.output_layer.decode(o)
-#        self.y_pred = self.output_layer.decode(T.log(o))
         self.y_prob = o.dimshuffle(1, 0, 2)
-        self.hidden_reps = h.dimshuffle(1, 0, 2)
 
         ############
         # Training #
@@ -81,40 +107,25 @@ class Model(object):
         self.nll, self.cost = self.objective_f(o=o, reg=argv.reg)
         self.update = self.optimize(cost=self.cost, opt=argv.opt, lr=argv.lr)
 
-    def set_layers(self, init_emb):
+    def set_layers(self):
         argv = self.argv
-        dim_emb = argv.dim_emb if init_emb is None else len(init_emb[0])
+        dim_emb = argv.dim_emb if self.emb is None else len(self.emb[0])
         dim_posit = argv.dim_posit
         dim_in = dim_emb * (5 + argv.window) + dim_posit
         dim_h = argv.dim_hidden
         dim_out = self.n_labels
 
-        self.emb_layers.append(EmbeddingLayer(init_emb=init_emb, n_vocab=self.n_vocab, dim_emb=dim_emb,
+        self.emb_layers.append(EmbeddingLayer(init_emb=self.emb, n_vocab=self.n_vocab, dim_emb=dim_emb,
                                               fix=argv.fix, pad=1))
         self.emb_layers.append(EmbeddingLayer(init_emb=None, n_vocab=15, dim_emb=dim_posit, fix=argv.fix, pad=0))
         self.emb_layers.append(Layer(n_in=dim_in, n_h=dim_h))
-
-        if self.argv.hidden_layer == 0:
-            self.hidden_layers = CrankRNNLayers(argv=argv, unit=argv.unit, depth=argv.layers, n_in=dim_h, n_h=dim_h)
-        else:
-            self.hidden_layers = BiRNNLayers(argv=argv, unit=argv.unit, depth=argv.layers, n_in=dim_h, n_h=dim_h)
-
-        if self.argv.output_layer == 0:
-            self.output_layer = SoftmaxLayer(n_i=dim_h, n_labels=dim_out)
-        elif self.argv.output_layer == 1:
-            self.output_layer = MEMMLayer(n_i=dim_h, n_labels=dim_out)
-        else:
-            self.output_layer = CRFLayer(n_i=dim_h, n_labels=dim_out)
+        self.hidden_layers = StackedBiRNNLayers(argv=argv, unit=argv.unit, depth=argv.layers, n_in=dim_h, n_h=dim_h)
+        self.output_layer = SoftmaxLayer(n_i=dim_h, n_labels=dim_out)
 
         self.layers.extend(self.emb_layers)
         self.layers.extend(self.hidden_layers.layers)
         self.layers.append(self.output_layer)
         say('No. of layers: %d\n' % self.argv.layers)
-
-    def set_params(self):
-        for l in self.layers:
-            self.params.extend(l.params)
-        say("No. of parameters: {}\n".format(sum(len(x.get_value(borrow=True).ravel()) for x in self.params)))
 
     def emb_layer_forward(self, x_w, x_p):
         """
@@ -141,25 +152,6 @@ class Model(object):
         """
         return self.layers[-1].forward(x)
 
-    def objective_f(self, o, reg):
-        p_y = self.output_layer.get_y_prob(o, self.y_gold.dimshuffle((1, 0)))
-#        p_y = cross_entropy(o.dimshuffle(1, 0, 2).reshape((o.shape[0] * o.shape[1], -1)), self.y_gold.flatten())
-        nll = - T.mean(p_y)
-#        nll = T.mean(p_y)
-#        nll = T.mean(T.sum(p_y.reshape((o.shape[1], o.shape[0])), axis=1))
-        cost = nll + reg * L2_sqr(self.params) / 2.
-        return nll, cost
-
-    def optimize(self, cost, opt, lr):
-        params = self.params
-        if opt == 'adagrad':
-            return ada_grad(cost=cost, params=params, lr=lr)
-        elif opt == 'ada_delta':
-            return ada_delta(cost=cost, params=params)
-        elif opt == 'adam':
-            return adam(cost=cost, params=params)
-        return sgd(cost=cost, params=params, lr=lr)
-
 
 class GridModel(Model):
 
@@ -172,39 +164,33 @@ class GridModel(Model):
         self.inputs = [x_w, x_p, y]
         self.x = [x_w, x_p]
 
-        self.dropout = theano.shared(np.float32(argv.dropout).astype(theano.config.floatX))
-        self.set_layers(self.emb)
+        self.set_layers()
         self.set_params()
 
         x = self.emb_layer_forward(x_w, x_p)
         h = self.hidden_layer_forward(x)
-        h = self.output_layer_forward(h)
+        o = self.output_layer_forward(h)
 
-        self.y_pred = self.output_layer.decode(h)
+        self.y_pred = self.output_layer.decode(o)
         self.y_gold = y.reshape(self.y_pred.shape)
-        self.y_prob = h.dimshuffle(1, 0, 2)
+        self.y_prob = o.dimshuffle(1, 0, 2)
 
-        self.nll, self.cost = self.objective_f(o=h, reg=argv.reg)
+        self.nll, self.cost = self.objective_f(o=o, reg=argv.reg)
         self.update = self.optimize(cost=self.cost, opt=argv.opt, lr=argv.lr)
 
-    def set_layers(self, init_emb):
+    def set_layers(self):
         argv = self.argv
-        dim_emb = argv.dim_emb if init_emb is None else len(init_emb[0])
+        dim_emb = argv.dim_emb if self.emb is None else len(self.emb[0])
         dim_posit = argv.dim_posit
         dim_in = dim_emb * (5 + argv.window) + dim_posit
         dim_h = argv.dim_hidden
         dim_out = self.n_labels
 
-        self.emb_layers.append(EmbeddingLayer(init_emb=init_emb, n_vocab=self.n_vocab, dim_emb=dim_emb,
+        self.emb_layers.append(EmbeddingLayer(init_emb=self.emb, n_vocab=self.n_vocab, dim_emb=dim_emb,
                                               fix=argv.fix, pad=1))
         self.emb_layers.append(EmbeddingLayer(init_emb=None, n_vocab=15, dim_emb=dim_posit, fix=argv.fix, pad=0))
         self.emb_layers.append(Layer(n_in=dim_in, n_h=dim_h))
-
-        if self.argv.hidden_layer == 0:
-            self.hidden_layers = GridObliqueNetwork(argv=argv, unit=argv.unit, depth=argv.layers, n_in=dim_h, n_h=dim_h)
-        else:
-            self.hidden_layers = GridAttentionNetwork(argv=argv, unit=argv.unit, depth=argv.layers, n_in=dim_h, n_h=dim_h)
-
+        self.hidden_layers = GridNetwork(argv=argv, unit=argv.unit, depth=argv.layers, n_in=dim_h, n_h=dim_h)
         self.output_layer = SoftmaxLayer(n_i=dim_h, n_labels=dim_out)
 
         self.layers.extend(self.emb_layers)
@@ -238,13 +224,3 @@ class GridModel(Model):
         x = x.reshape((x.shape[0] * x.shape[1], x.shape[2], x.shape[3]))
         x = x.dimshuffle(1, 0, 2)
         return self.layers[-1].forward(x)
-
-    def objective_f(self, o, reg):
-        p_y = self.output_layer.get_y_prob(o, self.y_gold.dimshuffle((1, 0)))
-#        p_y = T.sum(p_y.reshape((self.x[0].shape[0], self.x[0].shape[1])), axis=1)
-#        p_y = cross_entropy(o.dimshuffle(1, 0, 2).reshape((o.shape[0] * o.shape[1], -1)), self.y_gold.flatten())
-        nll = - T.mean(p_y)
-#        nll = T.mean(T.sum(p_y.reshape((o.shape[1], o.shape[0])), axis=1))
-#        nll = T.mean(p_y)
-        cost = nll + reg * L2_sqr(self.params) / 2.
-        return nll, cost
