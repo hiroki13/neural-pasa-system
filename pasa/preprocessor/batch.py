@@ -189,8 +189,8 @@ class GridBatch(BaseBatch):
     @staticmethod
     def _sort_input_vals(inputs):
         shuffle(inputs)
-        inputs.sort(key=lambda elem: len(elem[0]))
-        inputs.sort(key=lambda elem: len(elem[0][0]))
+        inputs.sort(key=lambda elem: len(elem[0]))  # n_prds
+        inputs.sort(key=lambda elem: len(elem[0][0]))  # n_words
         return inputs
 
     def _is_batch_boundary(self, elems, prev_elems, n_samples):

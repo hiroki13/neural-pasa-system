@@ -17,11 +17,11 @@ class SampleFactory(object):
         raise NotImplementedError
 
     @abstractmethod
-    def create_sample(self, sent):
+    def _create_sample(self, sent):
         raise NotImplementedError
 
     @abstractmethod
-    def create_batch(self, samples):
+    def create_batches(self, samples):
         raise NotImplementedError
 
 
@@ -34,16 +34,16 @@ class BaseSampleFactory(SampleFactory):
         """
         if corpus is None:
             return None
-        return [self.create_sample(sent=sent) for sent in corpus]
+        return [self._create_sample(sent) for sent in corpus]
 
-    def create_sample(self, sent):
-        return BaseSample(sent, self.argv.window, self.vocab_word, self.vocab_label)
+    def _create_sample(self, sent):
+        return BaseSample(sent, self.argv.mark_phi, self.argv.window, self.vocab_word, self.vocab_label)
 
-    def create_batch(self, samples):
+    def create_batches(self, samples):
         return BaseBatch(self.batch_size, samples)
 
 
 class GridSampleFactory(BaseSampleFactory):
 
-    def create_batch(self, samples):
+    def create_batches(self, samples):
         return GridBatch(self.batch_size, samples)

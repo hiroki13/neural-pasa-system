@@ -11,9 +11,9 @@ O = u'O'
 NI = u'Ni'
 PRD = u'V'
 
-GA_LABEL = 0
-O_LABEL = 1
-NI_LABEL = 2
+GA_INDEX = 0
+O_INDEX = 1
+NI_INDEX = 2
 
 
 class Vocab(object):

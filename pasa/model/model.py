@@ -3,7 +3,7 @@ import theano.tensor as T
 from abc import ABCMeta, abstractmethod
 from ..utils.io_utils import say
 from ..nn.layers import Layer, EmbeddingLayer, SoftmaxLayer, StackedBiRNNLayers, GridNetwork
-from ..nn.nn_utils import L2_sqr
+from ..nn.nn_utils import L2_sqr, tanh
 from ..nn.optimizers import ada_grad, ada_delta, adam, sgd
 
 
@@ -76,13 +76,15 @@ class BaseModel(Model):
 
     def compile(self, variables):
         argv = self.argv
-        x_w, x_p, y = variables
+
+        x = variables[:-1]
+        y = variables[-1]
 
         ###################
         # Input variables #
         ###################
-        self.inputs = [x_w, x_p, y]
-        self.x = [x_w, x_p]
+        self.inputs = x + [y]
+        self.x = x
 
         self.set_layers()
         self.set_params()
@@ -90,8 +92,8 @@ class BaseModel(Model):
         ############
         # Networks #
         ############
-        x = self.emb_layer_forward(x_w, x_p)
-        h = self.hidden_layer_forward(x)
+        h0 = self.emb_layer_forward(x)
+        h = self.hidden_layer_forward(h0)
         o = self.output_layer_forward(h)
 
         ###########
@@ -111,13 +113,18 @@ class BaseModel(Model):
         argv = self.argv
         dim_emb = argv.dim_emb if self.emb is None else len(self.emb[0])
         dim_posit = argv.dim_posit
-        dim_in = dim_emb * (5 + argv.window) + dim_posit
+
+        dim_in = dim_emb * (1 + argv.window)
+        if len(self.x) > 1:
+            dim_in += dim_posit
+
         dim_h = argv.dim_hidden
         dim_out = self.n_labels
 
         self.emb_layers.append(EmbeddingLayer(init_emb=self.emb, n_vocab=self.n_vocab, dim_emb=dim_emb,
                                               fix=argv.fix, pad=1))
-        self.emb_layers.append(EmbeddingLayer(init_emb=None, n_vocab=15, dim_emb=dim_posit, fix=argv.fix, pad=0))
+        if len(self.x) > 1:
+            self.emb_layers.append(EmbeddingLayer(init_emb=None, n_vocab=2, dim_emb=dim_posit, fix=argv.fix, pad=0))
         self.emb_layers.append(Layer(n_in=dim_in, n_h=dim_h))
         self.hidden_layers = StackedBiRNNLayers(argv=argv, unit=argv.unit, depth=argv.layers, n_in=dim_h, n_h=dim_h)
         self.output_layer = SoftmaxLayer(n_i=dim_h, n_labels=dim_out)
@@ -127,16 +134,19 @@ class BaseModel(Model):
         self.layers.append(self.output_layer)
         say('No. of layers: %d\n' % self.argv.layers)
 
-    def emb_layer_forward(self, x_w, x_p):
+    def emb_layer_forward(self, x):
         """
-        :param x_w: 1D: batch, 2D: n_words, 3D: 5 + window; word id
-        :param x_p: 1D: batch, 2D: n_words; posit id
+        :param x: 1D: n_phi, 2D: batch, 3D: n_words, 4D: dim_phi
         :return: 1D: batch, 2D: n_words, 3D: dim_in (dim_emb * (5 + window + 1))
         """
-        x_w = self.emb_layers[0].lookup(x_w).reshape((x_w.shape[0], x_w.shape[1], -1))
-        x_p = self.emb_layers[1].lookup(x_p)
-        x = T.concatenate([x_w, x_p], axis=2)
-        return self.emb_layers[2].dot(x).dimshuffle(1, 0, 2)
+        x_w = x[0]
+        x_in = self.emb_layers[0].lookup(x_w).reshape((x_w.shape[0], x_w.shape[1], -1))
+        if len(x) > 1:
+            x_p = x[1]
+            x_p = self.emb_layers[1].lookup(x_p)
+            x_in = T.concatenate([x_in, x_p], axis=2)
+
+        return self.emb_layers[len(x)].dot(x_in).dimshuffle(1, 0, 2)
 
     def hidden_layer_forward(self, x):
         """
@@ -160,15 +170,17 @@ class GridModel(Model):
         # x_w: 1D: batch, 2D: n_prds, 3D: n_words, 4D: 5+window; word id
         # x_p: 1D: batch, 2D: n_prds, 3D: n_words; posit id
         # y: 1D: batch, 2D: n_prds, 3D: n_words; elem=label id
-        x_w, x_p, y = variables
-        self.inputs = [x_w, x_p, y]
-        self.x = [x_w, x_p]
+
+        x = variables[:-1]
+        y = variables[-1]
+        self.inputs = x + [y]
+        self.x = x
 
         self.set_layers()
         self.set_params()
 
-        x = self.emb_layer_forward(x_w, x_p)
-        h = self.hidden_layer_forward(x)
+        h0 = self.emb_layer_forward(x)
+        h = self.hidden_layer_forward(h0)
         o = self.output_layer_forward(h)
 
         self.y_pred = self.output_layer.decode(o)
@@ -182,13 +194,16 @@ class GridModel(Model):
         argv = self.argv
         dim_emb = argv.dim_emb if self.emb is None else len(self.emb[0])
         dim_posit = argv.dim_posit
-        dim_in = dim_emb * (5 + argv.window) + dim_posit
+        dim_in = dim_emb * (1 + argv.window)
+        if len(self.x) > 1:
+            dim_in += dim_posit
         dim_h = argv.dim_hidden
         dim_out = self.n_labels
 
         self.emb_layers.append(EmbeddingLayer(init_emb=self.emb, n_vocab=self.n_vocab, dim_emb=dim_emb,
                                               fix=argv.fix, pad=1))
-        self.emb_layers.append(EmbeddingLayer(init_emb=None, n_vocab=15, dim_emb=dim_posit, fix=argv.fix, pad=0))
+        if len(self.x) > 1:
+            self.emb_layers.append(EmbeddingLayer(init_emb=None, n_vocab=2, dim_emb=dim_posit, fix=argv.fix, pad=0))
         self.emb_layers.append(Layer(n_in=dim_in, n_h=dim_h))
         self.hidden_layers = GridNetwork(argv=argv, unit=argv.unit, depth=argv.layers, n_in=dim_h, n_h=dim_h)
         self.output_layer = SoftmaxLayer(n_i=dim_h, n_labels=dim_out)
@@ -198,16 +213,18 @@ class GridModel(Model):
         self.layers.append(self.output_layer)
         say('No. of rnn layers: %d\n' % self.argv.layers)
 
-    def emb_layer_forward(self, x_w, x_p):
+    def emb_layer_forward(self, x):
         """
-        :param x_w: 1D: batch, 2D: n_prds, 3D: n_words, 4D: 5+window; word id
-        :param x_p: 1D: batch, 2D: n_prds, 3D: n_words; 0/1
+        :param x: 1D: n_phi, 2D: batch, 3D: n_prds, 4D: n_words, 5D: dim_phi
         :return: 1D: batch, 2D: n_prds, 3D: n_words, 4D: dim_h
         """
-        x_w = self.emb_layers[0].lookup(x_w).reshape((x_w.shape[0], x_w.shape[1], x_w.shape[2], -1))
-        x_p = self.emb_layers[1].lookup(x_p)
-        x = T.concatenate([x_w, x_p], axis=3)
-        return self.emb_layers[2].dot(x)
+        x_w = x[0]
+        x_in = self.emb_layers[0].lookup(x_w).reshape((x_w.shape[0], x_w.shape[1], x_w.shape[2], -1))
+        if len(x) > 1:
+            x_p = self.emb_layers[1].lookup(x[1])
+            x_in = T.concatenate([x_in, x_p], axis=3)
+
+        return self.emb_layers[len(self.x)].dot(x_in)
 
     def hidden_layer_forward(self, x):
         """

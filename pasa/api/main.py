@@ -53,16 +53,16 @@ if __name__ == '__main__':
     parser.add_argument('--unit', default='gru', help='unit')
     parser.add_argument('--fix', type=int, default=0, help='fix or not init embeddings')
     parser.add_argument('--layers',  type=int, default=1, help='number of layers')
-    parser.add_argument('--window', type=int, default=1, help='window size for convolution')
+    parser.add_argument('--window', type=int, default=5, help='window size for convolution')
     parser.add_argument('--dim_emb',    type=int, default=32, help='dimension of word embeddings')
-    parser.add_argument('--dim_posit',  type=int, default=5, help='dimension of position embeddings')
+    parser.add_argument('--dim_posit',  type=int, default=32, help='dimension of position embeddings')
     parser.add_argument('--dim_hidden', type=int, default=32, help='dimension of hidden layer')
 
     #######################
     # Training Parameters #
     #######################
-    parser.add_argument('--phi_type', default='rel', help='feature types mark/rel')
-    parser.add_argument('--batch_size', type=int, default=8, help='mini batch size')
+    parser.add_argument('--mark_phi', type=int, default=1, help='mark phi')
+    parser.add_argument('--batch_size', type=int, default=4, help='mini batch size')
     parser.add_argument('--epoch', type=int, default=50, help='number of epochs to train')
     parser.add_argument('--opt', default='adam', help='optimization method')
     parser.add_argument('--lr', type=float, default=0.0075, help='learning rate')

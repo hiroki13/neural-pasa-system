@@ -64,7 +64,7 @@ class NTCLoader(CorpusLoader):
                     chunk_index, chunk_head = self._get_chunk_info(elem)
                 elif line.startswith(EOS):
                     for w in sent:
-                        w.set_cases(sent, doc)
+                        w.set_cases(sent)
                     doc.append(sent)
                     sent = []
                 else:

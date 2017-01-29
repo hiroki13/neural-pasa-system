@@ -29,20 +29,18 @@ def show_case_dist(corpus):
                 if w.is_prd is False:
                     continue
                 flag = False
-                w_case_arg_ids = w.case_arg_ids
-                w_case_types = w.case_types
-                for i, (a, t) in enumerate(zip(w_case_arg_ids, w_case_types)):
-                    if t > -1:
-                        case_types[i][t] += 1
-                        if 0 < t < 3:
+                for case_index, arg_type in enumerate(w.arg_types):
+                    if arg_type > -1:
+                        case_types[case_index][arg_type] += 1
+                        if 0 < arg_type < 3:
                             flag = True
                 if flag:
                     n_prds += 1
 
-    for i, cases in enumerate(case_types):
-        if i == 0:
+    for case_index, cases in enumerate(case_types):
+        if case_index == 0:
             label = 'Ga'
-        elif i == 1:
+        elif case_index == 1:
             label = 'O'
         else:
             label = 'Ni'
@@ -72,8 +70,8 @@ def corpus_statistics(corpus):
             for word in sent:
                 if word.is_prd:
                     n_pds += 1
-                    for case_i, arg in enumerate(word.case_arg_ids):
-                        if arg > -1:
+                    for case_i, arg_id in enumerate(word.arg_ids):
+                        if arg_id > -1:
                             n_args += 1
 
     print '\tDocs: %d  Sents: %d  Words: %d' % (len(corpus), n_sents, n_words)

@@ -1,5 +1,4 @@
-from ..experimenter.trainer import *
-from ..experimenter.tester import *
+from ..experimenter.experimenter import *
 from ..experimenter.epoch_manager import *
 from ..preprocessor.preprocessor import *
 from ..model.model_api import *
@@ -59,5 +58,4 @@ class Driver(object):
     @staticmethod
     def _load_config(argv):
         config = load_data(argv.load_config)
-        config.n_best = argv.n_best
         return config

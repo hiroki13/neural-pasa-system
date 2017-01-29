@@ -130,10 +130,10 @@ class SampleEval(Eval):
             self._add_corrects(sample, prd_index, y_sys, y_gold)
 
     def _add_results_gold(self, sample, prd_index):
-        case_types = sample.sent[prd_index].case_types
-        for i, c in enumerate(case_types):
-            if c == BST or c == DEP or c == INTRA_ZERO:
-                self.results_gold[i][c] += 1
+        arg_types = sample.sent[prd_index].arg_types
+        for case_index, arg_type in enumerate(arg_types):
+            if arg_type == BST or arg_type == DEP or arg_type == INTRA_ZERO:
+                self.results_gold[case_index][arg_type] += 1
 
     def _add_results_sys(self, sample, prd_index, label_vec):
         for word_index, label_id in enumerate(label_vec):

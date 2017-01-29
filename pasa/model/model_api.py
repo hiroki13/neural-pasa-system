@@ -162,7 +162,9 @@ class BaseModelAPI(ModelAPI):
         # x_w: 1D: batch, 2D: n_words, 3D: 5 + window; word id
         # x_p: 1D: batch, 2D: n_words; posit id
         # y: 1D: batch, 2D: n_words; label id
-        return T.itensor3('x_w'), T.imatrix('x_p'), T.imatrix('y')
+        if self.argv.mark_phi:
+            return [T.itensor3('x_w'), T.imatrix('x_p'), T.imatrix('y')]
+        return [T.itensor3('x_w'), T.imatrix('y')]
 
     def _format_inputs(self, sample):
         return sample.x
@@ -181,7 +183,9 @@ class GridModelAPI(ModelAPI):
         # x_w: 1D: batch, 2D: n_prds, 3D: n_words, 4D: 5 + window; elem=word id
         # x_p: 1D: batch, 2D: n_prds, 3D: n_words; elem=posit id
         # y: 1D: batch, 2D: n_prds, 3D: n_words; elem=label id
-        return T.itensor4('x_w'), T.itensor3('x_p'), T.itensor3('y')
+        if self.argv.mark_phi:
+            return [T.itensor4('x_w'), T.itensor3('x_p'), T.itensor3('y')]
+        return [T.itensor4('x_w'), T.itensor3('y')]
 
     def _format_inputs(self, sample):
         inputs = []

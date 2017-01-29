@@ -132,13 +132,12 @@ class BiRNNLayers(RNNLayers):
         :param x: 1D: n_words, 2D: batch, 3D: dim_emb
         :return: 1D: n_words, 2D: batch, 3D: dim_h
         """
-        h0_f = T.zeros((x.shape[1], x.shape[2]), dtype=theano.config.floatX)
-        h0_b = T.zeros((x.shape[1], x.shape[2]), dtype=theano.config.floatX)
+        h0 = T.zeros_like(x[0], dtype=theano.config.floatX)
         h = x
         # 1D: n_words, 2D: batch, 3D n_h
         for i in xrange(self.depth):
-            hf = self.layers[(2*i)].forward_all(h, h0_f)
-            hb = self.layers[(2*i)+1].forward_all(h[::-1], h0_b)[::-1]
+            hf = self.layers[(2*i)].forward_all(h, h0)
+            hb = self.layers[(2*i)+1].forward_all(h[::-1], h0)[::-1]
             if self.argv.res:
                 h = hf + hb + h
             else:
@@ -165,11 +164,10 @@ class ConcatedBiRNNLayers(RNNLayers):
         :return: 1D: n_words, 2D: batch, 3D: dim_h
         """
         x = x.dimshuffle(1, 0, 2)
-        h0_1 = T.zeros((x.shape[1], x.shape[2]), dtype=theano.config.floatX)
-        h0_2 = T.zeros((x.shape[1], x.shape[2]), dtype=theano.config.floatX)
+        h0 = T.zeros_like(x[0], dtype=theano.config.floatX)
         # 1D: n_words, 2D: batch, 3D n_h
-        h1 = self.layers[0].forward_all(x, h0_1)
-        h2 = self.layers[1].forward_all(x[::-1], h0_2)[::-1]
+        h1 = self.layers[0].forward_all(x, h0)
+        h2 = self.layers[1].forward_all(x[::-1], h0)[::-1]
         return self.layers[2].dot(T.concatenate([h1, h2], axis=2))
 
 
@@ -194,7 +192,7 @@ class StackedBiRNNLayers(RNNLayers):
         :param x: 1D: n_words, 2D: batch, 3D: dim_h
         :return: 1D: n_words, 2D: batch, 3D: dim_h
         """
-        h0 = T.zeros((x.shape[1], x.shape[2]), dtype=theano.config.floatX)
+        h0 = T.zeros_like(x[0], dtype=theano.config.floatX)
         for layer in self.layers:
             h = layer.forward_all(x, h0)
             if self.argv.res:
@@ -206,8 +204,8 @@ class StackedBiRNNLayers(RNNLayers):
         return x
 
     def lstm_forward(self, x):
-        h0 = T.zeros((x.shape[1], x.shape[2]), dtype=theano.config.floatX)
-        c0 = T.zeros((x.shape[1], x.shape[2]), dtype=theano.config.floatX)
+        h0 = T.zeros_like(x[0], dtype=theano.config.floatX)
+        c0 = T.zeros_like(x[0], dtype=theano.config.floatX)
         for layer in self.layers:
             h, c = layer.forward_all(x, h0, c0)
             if self.argv.res:

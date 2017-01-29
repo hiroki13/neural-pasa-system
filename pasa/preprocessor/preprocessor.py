@@ -5,7 +5,6 @@ from abc import ABCMeta, abstractmethod
 from sample_factory import BaseSampleFactory, GridSampleFactory
 from ..ling.vocab import Vocab, UNK, PAD
 from ..utils.io_utils import NTCLoader, say, load_init_emb
-from ..utils.stats import corpus_statistics, sample_statistics, show_case_dist
 
 
 class Preprocessor(object):
@@ -59,8 +58,8 @@ class Preprocessor(object):
     def _format_corpus(self, corpus):
         raise NotImplementedError
 
-    def create_batch(self, samples):
-        return self.sample_factory.create_batch(samples)
+    def create_batches(self, samples):
+        return self.sample_factory.create_batches(samples)
 
     @staticmethod
     def create_vocab_label():
@@ -81,17 +80,6 @@ class Preprocessor(object):
         vocab_word, emb = load_init_emb(self.argv.init_emb, self.argv.dim_emb)
         say('\n\tWord Embedding Size: %d\n' % vocab_word.size())
         return vocab_word, emb
-
-    @staticmethod
-    def show_corpus_stats(corpora):
-        for corpus in corpora:
-            corpus_statistics(corpus)
-            show_case_dist(corpus)
-
-    @staticmethod
-    def show_sample_stats(sample_set, vocab_label):
-        for samples in sample_set:
-            sample_statistics(samples, vocab_label)
 
     def create_trainable_emb(self, train_corpus, vocab_word, emb):
         untrainable_emb = None

@@ -8,6 +8,3 @@ def main(argv):
     tester.setup_experiment()
     say('\n\nPREDICTING\n')
     tester.predict()
-
-    if argv.output == 'pretrain':
-        tester.output_pretrained_reps()
