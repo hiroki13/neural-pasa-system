@@ -183,7 +183,8 @@ class Tester(Experimenter):
             test_results = model_api.predict_one_epoch(self.test_samples)
             test_f1 = model_api.eval_one_epoch(test_results, self.test_samples)
             say('\n\n\tBEST TEST F:{:.2%}\n'.format(test_f1))
-#            if self.argv.save:
-#                model_api.save_pas_results(results=test_results.decoder_outputs, samples=self.test_samples)
+
+            if self.argv.save:
+                model_api.save_pas_results(results=test_results, samples=self.test_samples)
 
 

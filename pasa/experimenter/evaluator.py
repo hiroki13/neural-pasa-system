@@ -293,21 +293,11 @@ class ResultEval(Eval):
     def update_results(self, batch_y_hat, batch_y):
         pass
 
-    def calc_results(self, corpus, options):
-        say('\n\tOption: %s' % str(options))
-        lower_n_prds = options[0]
-        upper_n_prds = options[1]
-        alt = options[2]
+    def calc_results(self, corpus):
         self._set_params()
 
         for sent in corpus:
-            if lower_n_prds < sent.size_prds() < upper_n_prds:
-                pass
-            else:
-                continue
             for pas in sent.pas:
-                if pas.prd.alt in alt:
-                    continue
                 self._add_results_gold(pas)
                 self._add_results_sys(pas)
                 self._add_corrects(pas)
@@ -371,3 +361,113 @@ class ResultEval(Eval):
         say('\n\tTOTAL:\tF:{:>7.2%}  P:{:>7.2%} ({:>5}/{:>5})  R:{:>7.2%} ({:>5}/{:>5})\n'.format(
             self.all_f1, self.all_precision, int(self.all_corrects), int(self.all_results_sys),
             self.all_recall, int(self.all_corrects), int(self.all_results_gold)))
+
+
+class PrdEval(Eval):
+
+    def _set_params(self, n_cases=3, n_case_types=3):
+        shape = (6, n_cases, n_case_types)
+        self.corrects = np.zeros(shape, dtype='float32')
+        self.results_sys = np.zeros(shape, dtype='float32')
+        self.results_gold = np.zeros(shape, dtype='float32')
+
+        self.precision = np.zeros(shape, dtype='float32')
+        self.recall = np.zeros(shape, dtype='float32')
+        self.f1 = np.zeros(shape, dtype='float32')
+
+    def _summarize(self):
+        p, r, f = self._calc_metrics(self.corrects, self.results_sys, self.results_gold)
+        self.precision = p
+        self.recall = r
+        self.f1 = f
+
+    def update_results(self, y_sys_batch, sample):
+        assert len(y_sys_batch) == len(sample.y)
+        n_prds = self._bin_prds(len(sample.y))
+        for prd_i, (y_sys, y_gold) in enumerate(zip(y_sys_batch, sample.y)):
+            assert len(y_sys) == len(y_gold)
+            prd_index = sample.prd_indices[prd_i]
+            self._add_results_gold(sample, prd_index, n_prds)
+            self._add_results_sys(sample, prd_index, n_prds, y_sys)
+            self._add_corrects(sample, prd_index, n_prds, y_sys, y_gold)
+
+    @staticmethod
+    def _bin_prds(n_prds):
+        if n_prds < 6:
+            return n_prds - 1
+        return 5
+
+    def _add_results_gold(self, sample, prd_index, n_prds):
+        arg_types = sample.sent[prd_index].arg_types
+        for case_index, arg_type in enumerate(arg_types):
+            if arg_type == BST or arg_type == DEP or arg_type == INTRA_ZERO:
+                self.results_gold[n_prds][case_index][arg_type] += 1
+
+    def _add_results_sys(self, sample, prd_index, n_prds, label_vec):
+        for word_index, label_id in enumerate(label_vec):
+            case_index = self._get_case_index(label_id)
+            case_type = self._get_case_type(word_index, prd_index, sample)
+            if -1 < case_index:
+                self.results_sys[n_prds][case_index][case_type] += 1
+
+    def _add_corrects(self, sample, prd_index, n_prds, y_sys, y_gold):
+        for word_index, (y_hat, y) in enumerate(zip(y_sys, y_gold)):
+            case_index = self._get_case_index(y_hat)
+            case_type = self._get_case_type(word_index, prd_index, sample)
+            if case_index < 0:
+                continue
+            if y_hat == y:
+                self.corrects[n_prds][case_index][case_type] += 1
+
+    def show_results(self):
+        self._summarize()
+        say('\n\tNLL: %f' % self.nll)
+        say('\n\n\tACCURACY')
+        for n_prds, (crr, res_sys, res_gold) in enumerate(zip(self.corrects, self.results_sys, self.results_gold)):
+            print '\n\tPRD-%d' % n_prds
+            self._show_each_prd_result(crr, res_sys, res_gold, n_prds)
+
+    def _show_each_prd_result(self, corrects, results_sys, results_gold, n_prds):
+        for case_index, (crr_c, r_sys_c, r_gold_c) in enumerate(zip(corrects,
+                                                                    results_sys,
+                                                                    results_gold)):
+            ttl_crr = np.sum(crr_c[1:])
+            ttl_res_sys = np.sum(r_sys_c[1:])
+            ttl_res_gold = np.sum(r_gold_c[1:])
+            precision, recall, f1 = self._calc_metrics(ttl_crr, ttl_res_sys, ttl_res_gold)
+
+            case_name = self._get_case_name(case_index)
+            say('\n\tCASE-%s:\n' % case_name)
+            say('\tALL:\tF:{:>7.2%}  P:{:>7.2%} ({:>5}/{:>5})  R:{:>7.2%} ({:>5}/{:>5})\n'.format(
+                f1, precision, int(ttl_crr), int(ttl_res_sys), recall, int(ttl_crr), int(ttl_res_gold)))
+
+            for case_type, (crr, r_sys, r_gold) in enumerate(zip(crr_c, r_sys_c, r_gold_c)):
+                case_type_name = None
+                if case_type == 1:
+                    case_type_name = 'DEP'
+                elif case_type == 2:
+                    case_type_name = 'ZERO'
+
+                if case_type_name is None:
+                    continue
+
+                say('\t{}:\tF:{:>7.2%}  P:{:>7.2%} ({:>5}/{:>5})  R:{:>7.2%} ({:>5}/{:>5})\n'.format(
+                    case_type_name, self.f1[n_prds][case_index][case_type],
+                    self.precision[n_prds][case_index][case_type], int(crr), int(r_sys),
+                    self.recall[n_prds][case_index][case_type], int(crr), int(r_gold)))
+
+        for index in xrange(2):
+            ttl_crr = np.sum(corrects[:, index+1])
+            ttl_res_sys = np.sum(results_sys[:, index+1])
+            ttl_res_gold = np.sum(results_gold[:, index+1])
+            precision, recall, f1 = self._calc_metrics(ttl_crr, ttl_res_sys, ttl_res_gold)
+
+            say('\tTYPE-{} ALL:\tF:{:>7.2%}  P:{:>7.2%} ({:>5}/{:>5})  R:{:>7.2%} ({:>5}/{:>5})\n'.format(
+                index, f1, precision, int(ttl_crr), int(ttl_res_sys), recall, int(ttl_crr), int(ttl_res_gold)))
+
+        ttl_crr = np.sum(corrects[:, 1:])
+        ttl_res_sys = np.sum(results_sys[:, 1:])
+        ttl_res_gold = np.sum(results_gold[:, 1:])
+        precision, recall, f1 = self._calc_metrics(ttl_crr, ttl_res_sys, ttl_res_gold)
+        say('\tTOTAL ALL:\tF:{:>7.2%}  P:{:>7.2%} ({:>5}/{:>5})  R:{:>7.2%} ({:>5}/{:>5})\n'.format(
+            f1, precision, int(ttl_crr), int(ttl_res_sys), recall, int(ttl_crr), int(ttl_res_gold)))

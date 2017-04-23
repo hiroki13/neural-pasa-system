@@ -3,10 +3,6 @@ import theano
 import theano.tensor as T
 
 
-default_rng = np.random.RandomState(np.random.randint(0, 9999))
-default_srng = T.shared_randomstreams.RandomStreams(default_rng.randint(9999))
-
-
 def relu(x):
     return T.nnet.relu(x)
 

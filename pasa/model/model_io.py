@@ -110,23 +110,36 @@ class IOManager(object):
             for result, sample in zip(results, samples):
                 text = self._generate_sent_info(sample.sent)
                 fout.writelines(text.encode('utf-8'))
-                text = self._generate_analyzed_pas_info(result, sample.label_ids, sample.prd_indices, sample.sent)
+                text = self._generate_analyzed_pas_info(result, sample)
                 fout.writelines(text.encode('utf-8'))
 
-    def _generate_analyzed_pas_info(self, result_sys, result_gold, prd_indices, sent):
+    def _generate_analyzed_pas_info(self, result_sys, sample):
+        sent = sample.sent
+        prds = [sent[prd_index] for prd_index in sample.prd_indices]
+        assert len(result_sys) == len(prds)
+
         text = ''
-        for r_s, r_g, prd_index in zip(result_sys, result_gold, prd_indices):
+        for prd_i, (r_s, prd) in enumerate(zip(result_sys, prds)):
+            prd_index = sample.prd_indices[prd_i]
             prd = sent[prd_index]
-            text += '#\tPRD\t%d:%s:%s:%s\n' % (prd_index, prd.form, prd.cpos, prd.alt)
+            text += '#\tPRD\t%d:%s\n' % (prd_index, prd.form)
             text += '*\tGold\t'
-            text += self._generate_analyzed_pas_info_each(sent, r_g)
+            text += self._generate_analyzed_pas_info_gold(sent, prd)
             text += '\n*\tSys\t'
-            text += self._generate_analyzed_pas_info_each(sent, r_s)
+            text += self._generate_analyzed_pas_info_sys(sent, r_s)
             text += '\n'
         text += '\n'
         return text
 
-    def _generate_analyzed_pas_info_each(self, sent, labels):
+    def _generate_analyzed_pas_info_gold(self, sent, prd):
+        text = ''
+        for case_index, index in enumerate(prd.arg_indices):
+            if index > -1:
+                word = sent[index]
+                text += '%s:%d:%s ' % (self.vocab_label.get_word(case_index+1), word.index, word.form)
+        return text
+
+    def _generate_analyzed_pas_info_sys(self, sent, labels):
         text = ''
         for word, label in zip(sent, labels):
             if 0 < label < 4:
@@ -146,5 +159,41 @@ class IOManager(object):
 
     @staticmethod
     def _generate_word_info(word):
-        return word.index, word.form, word.cpos, word.pos, word.alt, word.chunk_index, word.chunk_head
+        return word.index, word.form, word.chunk_index, word.chunk_head
+
+    def save_stats_test_format(self, results, samples):
+        fn = 'stats.' + self.output_fn + '.txt'
+        self._output_stats_format(fn, results, samples)
+        output_dir = self.output_dir + 'stats'
+        move_data(fn, output_dir)
+
+    def _output_stats_format(self, fn, results, samples):
+        assert len(results) == len(samples)
+        with open(fn, 'w') as fout:
+            for result, sample in zip(results, samples):
+                sent = sample.sent
+                for prd_result, prd_answer, prd_index in zip(result, sample.y, sample.prd_indices):
+                    prd = sent[prd_index]
+                    for word_index, (case_index1, case_index2) in enumerate(zip(prd_result, prd_answer)):
+                        word = sent[word_index]
+                        if word.chunk_head == prd.chunk_index or word.chunk_index == prd.chunk_head:
+                            arg_type = 'dep'
+                        else:
+                            arg_type = 'inner'
+                        case_name1 = self._get_case_name(case_index1)
+                        case_name2 = self._get_case_name(case_index2)
+                        text = '%s %s %s\n' % (case_name1, arg_type, case_name2)
+                        fout.writelines(text.encode('utf-8'))
+
+    @staticmethod
+    def _get_case_name(case_index):
+        case_name = 'NONE'
+        if case_index == 1:
+            case_name = 'ga'
+        elif case_index == 2:
+            case_name = 'o'
+        elif case_index == 3:
+            case_name = 'ni'
+        return case_name
+
 

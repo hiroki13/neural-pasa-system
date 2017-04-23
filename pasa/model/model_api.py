@@ -9,7 +9,7 @@ from abc import ABCMeta, abstractmethod
 from model_io import IOManager
 from model import BaseModel, GridModel
 from ..decoder.decoder import Decoder
-from ..experimenter.evaluator import SampleEval, BatchEval
+from ..experimenter.evaluator import SampleEval, BatchEval, PrdEval
 from ..utils.io_utils import say
 
 
@@ -128,12 +128,16 @@ class ModelAPI(object):
     @staticmethod
     def eval_one_epoch(batch_y_hat, samples):
         pred_eval = SampleEval()
+#        prd_eval = PrdEval()
         assert len(batch_y_hat) == len(samples)
         for result, sample in zip(batch_y_hat, samples):
             if len(result) == 0:
                 continue
             pred_eval.update_results(y_sys_batch=result, sample=sample)
+#            prd_eval.update_results(y_sys_batch=result, sample=sample)
+
         pred_eval.show_results()
+#        prd_eval.show_results()
         return pred_eval.all_f1
 
     def save_model(self):
